@@ -1,0 +1,17 @@
+{
+  "name": "recycle-game",
+  "version": "1.0.0",
+  "description": "A recycling education game for Princeton, NJ",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": ["recycling", "education", "game"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}
+
+
