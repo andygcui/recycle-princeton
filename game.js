@@ -295,8 +295,8 @@ function pickRandomItem() {
 function showEducationalContent() {
   if (!currentItem) return;
   
-  const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
-  educationalMessage = `Look! It's a ${currentItem.name}! Can you see the number ${currentItem.code}? That's the plastic code!`;
+  // Simple message: "Recycle this [item]!"
+  educationalMessage = `Recycle this ${currentItem.name.toLowerCase()}!`;
   educationalTimer = educationalDuration;
 }
 
@@ -979,11 +979,13 @@ function drawItem() {
       drawHeight
     );
     
-    // Draw plastic code badge at bottom
-    ctx.fillStyle = "#2D3748";
-    ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + itemHeight - 8);
+    // Draw plastic code badge at bottom only if hints are enabled
+    if (showHints) {
+      ctx.fillStyle = "#2D3748";
+      ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + itemHeight - 8);
+    }
     
     ctx.restore();
   } else {
@@ -1011,11 +1013,13 @@ function drawItem() {
     ctx.lineWidth = 3;
     ctx.stroke();
     
-    // Draw plastic code
-    ctx.fillStyle = "#2D3748";
-    ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + 50);
+    // Draw plastic code only if hints are enabled
+    if (showHints) {
+      ctx.fillStyle = "#2D3748";
+      ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + 50);
+    }
     
     // Item name
     ctx.fillStyle = "#2D3748";
