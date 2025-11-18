@@ -1,19 +1,10 @@
-// ============================================================================
-// RECYCLING EDUCATION GAME - PRINCETON, NJ
-// ============================================================================
-// This game teaches players which plastics are recyclable in Princeton, NJ.
-// The game has two phases: Category sorting and Plastic Code sorting.
-// ============================================================================
-
-// Canvas setup
+// canvas setup
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 800;
-canvas.height = 700; // Match window size exactly
+canvas.height = 700; 
 
-// ============================================================================
-// EDUCATIONAL CONTENT DATABASE
-// ============================================================================
+// education styff for the info page
 const CATEGORY_INFO = {
   green: {
     name: "Green - Widely Recyclable",
