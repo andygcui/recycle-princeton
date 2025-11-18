@@ -133,6 +133,7 @@ let showHints = true;  // Show educational hints
 // Image loading
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
 let imagesLoaded = false;
+let recycleSymbolImage = null;  // Recycling symbol image
 
 // Keyboard state
 const keys = {
@@ -148,11 +149,24 @@ const keys = {
 // ============================================================================
 function initGame() {
   loadImages();
+  loadRecycleSymbol();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
   itemY = 50;
   setupBins();
   gameLoop();
+}
+
+// Load recycling symbol image
+function loadRecycleSymbol() {
+  const img = new Image();
+  img.src = 'images/recycle.png';
+  img.onload = () => {
+    recycleSymbolImage = img;
+  };
+  img.onerror = () => {
+    console.log('Recycle symbol image not found');
+  };
 }
 
 // Load images for items
@@ -752,36 +766,8 @@ function drawSpeechBubble(text, x, y, maxWidth) {
 
 function drawEducationalHeader() {
   // Draw category legend if in category phase (positioned to avoid overlap)
-  if (phase === "category" && showHints) {
-    const boxX = 20;
-    const boxY = 200; // Moved down to avoid overlap with messages
-    const boxWidth = canvas.width - 40;
-    const boxHeight = 100;
-    
-    // Draw friendly info box
-    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-    roundedRect(boxX, boxY, boxWidth, boxHeight, 15);
-    ctx.fill();
-    
-    ctx.strokeStyle = "#FFD700";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    
-    ctx.fillStyle = "#2D3748";
-    ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Princeton Recycling Guide:", boxX + 15, boxY + 25);
-    
-    ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    let yPos = boxY + 50;
-    for (const [key, info] of Object.entries(CATEGORY_INFO)) {
-      const color = info.name.includes("Green") ? "#4CAF50" : 
-                    info.name.includes("Orange") ? "#FF9800" : "#F44336";
-      ctx.fillStyle = color;
-      ctx.fillText(`${info.name}: ${info.description}`, boxX + 20, yPos);
-      yPos += 22;
-    }
-  }
+  // Simplified - removed to reduce clutter
+  // Hints are now only shown in bins
 }
 
 // Draw recycling symbol (3 chasing arrows)
@@ -865,12 +851,21 @@ function drawBin(bin) {
   binGradient.addColorStop(0, lightenColor(baseColor, 20));
   binGradient.addColorStop(1, darkenColor(baseColor, 10));
   
-  // Draw bin with rounded corners
+  // Draw recycling bin shape (trapezoid - wider at top, narrower at bottom)
+  const topWidth = bin.width;
+  const bottomWidth = bin.width * 0.75; // Bottom is 75% of top width
+  const widthDiff = (topWidth - bottomWidth) / 2;
+  
   ctx.fillStyle = binGradient;
-  roundedRect(bin.x, bin.y, bin.width, bin.height, 20);
+  ctx.beginPath();
+  ctx.moveTo(bin.x, bin.y); // Top left
+  ctx.lineTo(bin.x + topWidth, bin.y); // Top right
+  ctx.lineTo(bin.x + topWidth - widthDiff, bin.y + bin.height); // Bottom right
+  ctx.lineTo(bin.x + widthDiff, bin.y + bin.height); // Bottom left
+  ctx.closePath();
   ctx.fill();
   
-  // Bin border with glow
+  // Bin border
   ctx.strokeStyle = "#FFFFFF";
   ctx.lineWidth = 4;
   ctx.stroke();
@@ -878,45 +873,75 @@ function drawBin(bin) {
   // Inner highlight
   ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
   ctx.lineWidth = 2;
-  roundedRect(bin.x + 2, bin.y + 2, bin.width - 4, bin.height - 4, 18);
+  ctx.beginPath();
+  ctx.moveTo(bin.x + 2, bin.y + 2);
+  ctx.lineTo(bin.x + topWidth - 2, bin.y + 2);
+  ctx.lineTo(bin.x + topWidth - widthDiff - 2, bin.y + bin.height - 2);
+  ctx.lineTo(bin.x + widthDiff + 2, bin.y + bin.height - 2);
+  ctx.closePath();
   ctx.stroke();
   
-  // Draw bin label - recycling symbol for category phase, text for code phase
-  if (phase === "category") {
-    // Draw recycling symbol (3 chasing arrows)
-    drawRecyclingSymbol(bin.x + bin.width / 2, bin.y + 35, 30, "#FFFFFF");
-  } else {
-    // Draw text label for code phase
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 26px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(bin.label, bin.x + bin.width / 2, bin.y + 35);
-  }
+  // Draw bin content - organized: numbers at top, symbol in center, examples at bottom
+  const centerX = bin.x + bin.width / 2;
   
-  // Show educational info if hints are on
-  if (showHints && bin.info) {
-    ctx.font = "12px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+  if (phase === "category") {
+    // Show numbers at the top if hints are on
+    if (showHints && bin.info) {
+      const codesMatch = bin.info.codes.match(/#\d+/g);
+      const codesText = codesMatch ? codesMatch.join(", ") : "";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(codesText, centerX, bin.y + 20);
+    }
     
-    if (phase === "category") {
-      // Show codes for this category
-      ctx.fillText(bin.info.codes, bin.x + bin.width / 2, bin.y + 55);
-      // Show examples
-      const examples = wrapText(ctx, bin.info.examples, bin.width - 15, 12);
-      let yOffset = bin.y + 75;
-      for (const line of examples) {
-        ctx.fillText(line, bin.x + bin.width / 2, yOffset);
-        yOffset += 14;
-      }
+    // Draw recycling symbol image in the center
+    if (recycleSymbolImage) {
+      const symbolSize = 40;
+      const symbolX = centerX - symbolSize / 2;
+      const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
+      ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
     } else {
-      // Show plastic code info
-      if (bin.info.common) {
-        const common = wrapText(ctx, bin.info.common, bin.width - 15, 12);
-        let yOffset = bin.y + 55;
-        for (const line of common) {
-          ctx.fillText(line, bin.x + bin.width / 2, yOffset);
-          yOffset += 14;
-        }
+      // Fallback to drawn symbol if image not loaded
+      drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
+    }
+    
+    // Show examples at the bottom if hints are on
+    if (showHints && bin.info) {
+      const examplesList = bin.info.examples.split(",").slice(0, 2).map(e => e.trim());
+      ctx.font = "11px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      let yOffset = bin.y + bin.height - 25;
+      // Draw from bottom up
+      for (let i = examplesList.length - 1; i >= 0; i--) {
+        ctx.fillText(examplesList[i], centerX, yOffset);
+        yOffset -= 13;
+      }
+    }
+  } else {
+    // Code phase: show label at top, symbol in center, examples at bottom
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(bin.label, centerX, bin.y + 20);
+    
+    // Draw recycling symbol in center (or could be the code number)
+    if (recycleSymbolImage) {
+      const symbolSize = 35;
+      const symbolX = centerX - symbolSize / 2;
+      const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
+      ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
+    }
+    
+    // Show examples at bottom if hints are on
+    if (showHints && bin.info && bin.info.common) {
+      const examplesList = bin.info.common.split(",").slice(0, 2).map(e => e.trim());
+      ctx.font = "11px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      let yOffset = bin.y + bin.height - 25;
+      for (let i = examplesList.length - 1; i >= 0; i--) {
+        ctx.fillText(examplesList[i], centerX, yOffset);
+        yOffset -= 13;
       }
     }
   }
