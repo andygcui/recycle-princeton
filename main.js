@@ -12,8 +12,8 @@ function createWindow() {
     }
   });
 
-  // Load the index.html file
-  win.loadFile('index.html');
+  // Load the home page first
+  win.loadFile('home.html');
 }
 
 // When Electron is ready, create the window

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recycle Princeton - Learn About Recycling</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body.info-page {
+            overflow-y: auto;
+            padding: 0;
+            position: relative;
+        }
+        
+        #infoCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+            z-index: 1000;
+        }
+        
+        .back-button:hover {
+            background: #45a049;
+            transform: translateY(-1px);
+        }
+        
+        .info-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            color: #2D3748;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .info-title {
+            font-size: 42px;
+            font-weight: bold;
+            color: #2D3748;
+            margin-bottom: 10px;
+            text-align: center;
+            font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+        }
+        
+        .section {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 30px;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #FFD700;
+        }
+        
+        .section-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+        }
+        
+        .section-content {
+            font-size: 16px;
+            line-height: 1.8;
+            font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+        }
+        
+        .plastic-code {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 5px solid;
+        }
+        
+        .plastic-code.green {
+            background: rgba(76, 175, 80, 0.15);
+            border-left-color: #4CAF50;
+        }
+        
+        .plastic-code.orange {
+            background: rgba(255, 152, 0, 0.15);
+            border-left-color: #FF9800;
+        }
+        
+        .plastic-code.red {
+            background: rgba(244, 67, 54, 0.15);
+            border-left-color: #F44336;
+        }
+        
+        .code-number {
+            font-size: 36px;
+            font-weight: bold;
+            margin-right: 20px;
+            min-width: 60px;
+        }
+        
+        .code-number.green {
+            color: #4CAF50;
+        }
+        
+        .code-number.orange {
+            color: #FF9800;
+        }
+        
+        .code-number.red {
+            color: #F44336;
+        }
+        
+        .code-info {
+            flex: 1;
+        }
+        
+        .code-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2D3748;
+            margin-bottom: 8px;
+        }
+        
+        .code-description {
+            color: #4A5568;
+            margin-bottom: 8px;
+        }
+        
+        .code-examples {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .category-box {
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .category-green {
+            background: rgba(76, 175, 80, 0.15);
+            border-left: 5px solid #4CAF50;
+        }
+        
+        .category-orange {
+            background: rgba(255, 152, 0, 0.15);
+            border-left: 5px solid #FF9800;
+        }
+        
+        .category-red {
+            background: rgba(244, 67, 54, 0.15);
+            border-left: 5px solid #F44336;
+        }
+        
+        .category-title {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .contamination-warning {
+            background: rgba(244, 67, 54, 0.2);
+            border: 3px solid #F44336;
+            padding: 25px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        
+        .contamination-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #F44336;
+            margin-bottom: 15px;
+        }
+        
+        ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .play-button {
+            padding: 15px 40px;
+            font-size: 18px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+        }
+        
+        .play-button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="info-page">
+    <canvas id="infoCanvas"></canvas>
+    <button class="back-button" onclick="goBack()">← Back</button>
+    
+    <div class="info-container">
+        <h1 class="info-title">Learn About Recycling</h1>
+        
+        <div class="section">
+            <h2 class="section-title">Why Recycling Matters</h2>
+            <div class="section-content">
+                <p>Recycling helps protect our planet by reducing waste and saving resources! When we recycle correctly, we:</p>
+                <ul>
+                    <li>Save energy and natural resources</li>
+                    <li>Reduce pollution</li>
+                    <li>Keep our communities clean</li>
+                    <li>Help create new products from old materials</li>
+                </ul>
+                
+                <div class="contamination-warning">
+                    <div class="contamination-title">Contamination is the Worst!</div>
+                    <p><strong>Contamination happens when wrong items go into recycling bins.</strong> This is a huge problem because:</p>
+                    <ul>
+                        <li>One wrong item can ruin an entire batch of recyclables</li>
+                        <li>Contaminated recycling often ends up in landfills instead</li>
+                        <li>It costs money and time to sort out bad items</li>
+                        <li>It can damage recycling equipment</li>
+                    </ul>
+                    <p><strong>That's why it's so important to learn which plastics go where!</strong> When you sort correctly, you're helping make recycling work for everyone.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">Understanding Plastic Codes</h2>
+            <div class="section-content">
+                <p>Every plastic item has a number inside a triangle of arrows. This number tells you what type of plastic it is!</p>
+                
+                <div class="plastic-code green">
+                    <div class="code-number green">#1</div>
+                    <div class="code-info">
+                        <div class="code-name">PET (Polyethylene Terephthalate)</div>
+                        <div class="code-description">Widely recyclable in Princeton! This is one of the most common recyclable plastics.</div>
+                        <div class="code-examples">Examples: Water bottles, soda bottles, food containers</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code green">
+                    <div class="code-number green">#2</div>
+                    <div class="code-info">
+                        <div class="code-name">HDPE (High-Density Polyethylene)</div>
+                        <div class="code-description">Widely recyclable in Princeton! Very common and easy to recycle.</div>
+                        <div class="code-examples">Examples: Milk jugs, detergent bottles, shampoo bottles</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code red">
+                    <div class="code-number red">#3</div>
+                    <div class="code-info">
+                        <div class="code-name">PVC (Polyvinyl Chloride)</div>
+                        <div class="code-description">NOT recyclable curbside in Princeton. These items should go in the trash.</div>
+                        <div class="code-examples">Examples: PVC pipes, vinyl flooring, some food wraps</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code orange">
+                    <div class="code-number orange">#4</div>
+                    <div class="code-info">
+                        <div class="code-name">LDPE (Low-Density Polyethylene)</div>
+                        <div class="code-description">Requires special dropoff in Princeton. Don't put these in curbside recycling!</div>
+                        <div class="code-examples">Examples: Plastic bags, shrink wrap, some food wraps</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code orange">
+                    <div class="code-number orange">#5</div>
+                    <div class="code-info">
+                        <div class="code-name">PP (Polypropylene)</div>
+                        <div class="code-description">Requires special dropoff in Princeton. Check with your local recycling center.</div>
+                        <div class="code-examples">Examples: Yogurt cups, bottle caps, takeout containers</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code red">
+                    <div class="code-number red">#6</div>
+                    <div class="code-info">
+                        <div class="code-name">PS (Polystyrene)</div>
+                        <div class="code-description">NOT recyclable curbside in Princeton. These should go in the trash.</div>
+                        <div class="code-examples">Examples: Styrofoam cups, disposable plates, packing peanuts</div>
+                    </div>
+                </div>
+                
+                <div class="plastic-code red">
+                    <div class="code-number red">#7</div>
+                    <div class="code-info">
+                        <div class="code-name">Other/Mixed Plastics</div>
+                        <div class="code-description">NOT recyclable curbside in Princeton. These are hard to recycle and should go in the trash.</div>
+                        <div class="code-examples">Examples: Mixed plastics, bioplastics, some food containers</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">Princeton Recycling Categories</h2>
+            <div class="section-content">
+                <div class="category-box category-green">
+                    <div class="category-title" style="color: #4CAF50;">Green - Widely Recyclable</div>
+                    <p><strong>Plastic codes #1 and #2</strong></p>
+                    <p>These plastics are accepted in curbside recycling in Princeton. Just rinse them clean and put them in your recycling bin!</p>
+                    <p><strong>Examples:</strong> Water bottles, milk jugs, detergent bottles</p>
+                </div>
+                
+                <div class="category-box category-orange">
+                    <div class="category-title" style="color: #FF9800;">Orange - Special Dropoff</div>
+                    <p><strong>Plastic codes #4 and #5</strong></p>
+                    <p>These require special dropoff locations. Don't put them in curbside recycling - they can contaminate the recycling stream!</p>
+                    <p><strong>Examples:</strong> Plastic bags, yogurt cups, takeout containers</p>
+                    <p><em>Check with Princeton's recycling center for dropoff locations.</em></p>
+                </div>
+                
+                <div class="category-box category-red">
+                    <div class="category-title" style="color: #F44336;">Red - Not Recyclable Curbside</div>
+                    <p><strong>Plastic codes #3, #6, and #7</strong></p>
+                    <p>These are NOT accepted in curbside recycling in Princeton. Putting them in recycling bins causes contamination!</p>
+                    <p><strong>Examples:</strong> Styrofoam, PVC pipes, mixed plastics</p>
+                    <p><em>These should go in the regular trash, not recycling.</em></p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">Tips for Better Recycling</h2>
+            <div class="section-content">
+                <ul>
+                    <li><strong>Rinse containers clean</strong> - Food residue can contaminate recycling</li>
+                    <li><strong>Check the number</strong> - Look for the recycling symbol with the number</li>
+                    <li><strong>When in doubt, throw it out</strong> - It's better to put something in trash than contaminate recycling</li>
+                    <li><strong>Remove caps</strong> - Check if your area wants caps on or off (Princeton: usually off)</li>
+                    <li><strong>No plastic bags in curbside</strong> - These need special dropoff</li>
+                    <li><strong>Keep it dry</strong> - Wet paper and cardboard can't be recycled</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px;">
+            <button class="play-button" onclick="startGame()">Ready to Play?</button>
+        </div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('infoCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Animated background elements
+        let cloudPositions = [
+            { x: 100, y: 50, size: 60 },
+            { x: 300, y: 80, size: 40 },
+            { x: 600, y: 60, size: 50 },
+            { x: 200, y: 120, size: 45 },
+            { x: 500, y: 100, size: 55 },
+            { x: 800, y: 70, size: 48 },
+            { x: 1000, y: 90, size: 42 }
+        ];
+        let animationFrame = 0;
+        
+        function drawCloud(x, y, size) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.beginPath();
+            ctx.arc(x, y, size * 0.6, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.5, y, size * 0.7, 0, Math.PI * 2);
+            ctx.arc(x + size, y, size * 0.6, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.3, y - size * 0.3, size * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.7, y - size * 0.3, size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawClouds() {
+            cloudPositions.forEach(cloud => {
+                drawCloud(cloud.x, cloud.y, cloud.size);
+            });
+        }
+        
+        function render() {
+            // Draw sky gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, "#87CEEB");
+            gradient.addColorStop(1, "#E0F6FF");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw clouds in background
+            drawClouds();
+        }
+        
+        function animate() {
+            // Animate clouds (move slowly to the right)
+            animationFrame++;
+            cloudPositions.forEach(cloud => {
+                cloud.x += 0.1; // Slow movement
+                // Wrap around when cloud goes off screen
+                if (cloud.x > canvas.width + cloud.size) {
+                    cloud.x = -cloud.size;
+                }
+            });
+            
+            render();
+            requestAnimationFrame(animate);
+        }
+        
+        function goBack() {
+            window.location.href = 'home.html';
+        }
+        
+        function startGame() {
+            // Get location from localStorage or use default
+            const location = localStorage.getItem('gameLocation') || 'Princeton, NJ';
+            window.location.href = 'index.html';
+        }
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>

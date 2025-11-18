@@ -4,13 +4,36 @@
     box-sizing: border-box;
 }
 
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
 body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+    min-height: 100vh;
+}
+
+/* Game page - prevent scrolling */
+body.game-page {
+    overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+}
+
+/* Info page - allow scrolling */
+body.info-page {
+    overflow-y: auto;
+    padding: 20px 0;
+}
+
+/* Home page */
+body.home-page {
+    overflow: hidden;
 }
 
 #gameCanvas {

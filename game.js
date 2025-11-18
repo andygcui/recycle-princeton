@@ -9,7 +9,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 800;
-canvas.height = 700; // Taller canvas for educational content
+canvas.height = 700; // Match window size exactly
 
 // ============================================================================
 // EDUCATIONAL CONTENT DATABASE
@@ -129,6 +129,20 @@ let educationalDuration = 300; // Longer for educational content
 
 let bins = [];
 let showHints = true;  // Show educational hints
+let gameLocation = "Princeton, NJ";  // Store location for display
+
+// Animated background elements
+let cloudPositions = [
+  { x: 100, y: 50, size: 60 },
+  { x: 300, y: 80, size: 40 },
+  { x: 600, y: 60, size: 50 }
+];
+let animationFrame = 0;
+
+// Flash effect for correct/incorrect feedback
+let flashColor = null;  // null, "green", or "red"
+let flashTimer = 0;
+let flashDuration = 30; // frames (about 0.5 seconds at 60fps)
 
 // Image loading
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
@@ -140,20 +154,45 @@ const keys = {
   left: false,
   right: false,
   down: false,
-  space: false,  // Spacebar for hints
-  enter: false   // Enter key to drop into bin below
+  space: false,  // Spacebar to toggle hints (demo mode)
+  shift: false,  // Shift for speed up (3x faster while held)
+  enter: false  // Enter key for instant drop
 };
 
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 function initGame() {
+  // Get location from localStorage
+  gameLocation = localStorage.getItem('gameLocation') || 'Princeton, NJ';
+  
   loadImages();
   loadRecycleSymbol();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 50;
+  itemY = 200; // Start below the "Recycle this [item]!" text
   setupBins();
+  
+  // Add click handler for info button on canvas
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Check if click is on info button (circular area)
+    const infoButtonX = canvas.width - 160;
+    const infoButtonY = 30 + 4;
+    const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
+    
+    const dx = x - infoButtonX;
+    const dy = y - infoButtonY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance <= infoButtonRadius) {
+      window.location.href = 'info.html';
+    }
+  });
+  
   gameLoop();
 }
 
@@ -204,6 +243,10 @@ function loadImages() {
           if (variantsLoaded === totalVariants) {
             itemImages[item.name] = variants;
             itemsProcessed++;
+            // Update current item image if this is the current item
+            if (currentItem && currentItem.name === item.name) {
+              updateCurrentItemImage();
+            }
             if (itemsProcessed === totalItems) {
               imagesLoaded = true;
             }
@@ -216,6 +259,10 @@ function loadImages() {
             // If no variants loaded, use fallback
             if (variants.length > 0) {
               itemImages[item.name] = variants;
+              // Update current item image if this is the current item
+              if (currentItem && currentItem.name === item.name) {
+                updateCurrentItemImage();
+              }
             }
             itemsProcessed++;
             if (itemsProcessed === totalItems) {
@@ -239,6 +286,10 @@ function loadImages() {
           if (variantsLoaded === totalVariants) {
             itemImages[item.name] = variants;
             itemsProcessed++;
+            // Update current item image if this is the current item
+            if (currentItem && currentItem.name === item.name) {
+              updateCurrentItemImage();
+            }
             if (itemsProcessed === totalItems) {
               imagesLoaded = true;
             }
@@ -251,6 +302,10 @@ function loadImages() {
             // If no variants loaded, use fallback
             if (variants.length > 0) {
               itemImages[item.name] = variants;
+              // Update current item image if this is the current item
+              if (currentItem && currentItem.name === item.name) {
+                updateCurrentItemImage();
+              }
             }
             itemsProcessed++;
             if (itemsProcessed === totalItems) {
@@ -267,6 +322,10 @@ function loadImages() {
       img.onload = () => {
         itemImages[item.name] = img;
         itemsProcessed++;
+        // Update current item image if this is the current item
+        if (currentItem && currentItem.name === item.name) {
+          updateCurrentItemImage();
+        }
         if (itemsProcessed === totalItems) {
           imagesLoaded = true;
         }
@@ -284,11 +343,10 @@ function loadImages() {
   });
 }
 
-function pickRandomItem() {
-  const randomIndex = Math.floor(Math.random() * ITEMS.length);
-  currentItem = ITEMS[randomIndex];
+// Helper function to update currentItemImage when images are loaded
+function updateCurrentItemImage() {
+  if (!currentItem) return;
   
-  // Select image variant for this item
   const itemImageData = itemImages[currentItem.name];
   if (itemImageData) {
     if (Array.isArray(itemImageData)) {
@@ -301,6 +359,14 @@ function pickRandomItem() {
   } else {
     currentItemImage = null;
   }
+}
+
+function pickRandomItem() {
+  const randomIndex = Math.floor(Math.random() * ITEMS.length);
+  currentItem = ITEMS[randomIndex];
+  
+  // Try to select image variant for this item
+  updateCurrentItemImage();
   
   // Show educational message when new item appears
   showEducationalContent();
@@ -357,37 +423,28 @@ function setupBins() {
   } else if (phase === "code") {
     // Set up bins based on which category we're sorting codes for
     if (codePhaseCategory === "green") {
-      // Green items: #1, #2, #5
+      // Green items: #1, #2 only (widely recyclable)
+      const twoBinSpacing = (canvas.width - (binWidth * 2)) / 3;
       bins = [
         {
-          x: spacing,
+          x: twoBinSpacing,
           y: binY,
           width: binWidth,
           height: binHeight,
           label: "#1 PET",
           code: 1,
-          color: "#2196F3",
+          color: "#4CAF50",
           info: PLASTIC_CODE_INFO[1]
         },
         {
-          x: spacing * 2 + binWidth,
+          x: twoBinSpacing * 2 + binWidth,
           y: binY,
           width: binWidth,
           height: binHeight,
           label: "#2 HDPE",
           code: 2,
-          color: "#2196F3",
+          color: "#4CAF50",
           info: PLASTIC_CODE_INFO[2]
-        },
-        {
-          x: spacing * 3 + binWidth * 2,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#5 PP",
-          code: 5,
-          color: "#2196F3",
-          info: PLASTIC_CODE_INFO[5]
         }
       ];
     } else if (codePhaseCategory === "orange") {
@@ -477,16 +534,20 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") keys.left = true;
   if (e.key === "ArrowRight") keys.right = true;
   if (e.key === "ArrowDown") keys.down = true;
-  if (e.key === "Enter") {
+  if (e.shiftKey) {
     e.preventDefault();
-    keys.enter = true;
-    // Drop item into bin directly below
-    dropIntoBinBelow();
+    keys.shift = true; // Speed up (3x faster while held)
   }
   if (e.key === " ") {
     e.preventDefault();
     keys.space = true;
-    showHints = !showHints; // Toggle hints
+    showHints = !showHints; // Toggle hints (demo mode)
+  }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    keys.enter = true;
+    // Instant drop - drop item into bin directly below
+    dropIntoBinBelow();
   }
 });
 
@@ -494,8 +555,12 @@ window.addEventListener("keyup", (e) => {
   if (e.key === "ArrowLeft") keys.left = false;
   if (e.key === "ArrowRight") keys.right = false;
   if (e.key === "ArrowDown") keys.down = false;
+  if (!e.shiftKey) keys.shift = false;
+  if (e.key === " ") {
+    e.preventDefault();
+    keys.space = false;
+  }
   if (e.key === "Enter") keys.enter = false;
-  if (e.key === " ") keys.space = false;
 });
 
 // ============================================================================
@@ -511,6 +576,14 @@ function update() {
   if (educationalTimer > 0) {
     educationalTimer--;
     if (educationalTimer === 0) educationalMessage = "";
+  }
+  
+  // Update flash effect
+  if (flashTimer > 0) {
+    flashTimer--;
+    if (flashTimer === 0) {
+      flashColor = null;
+    }
   }
   
   // Handle horizontal movement
@@ -532,12 +605,26 @@ function update() {
   
   // Handle fall speed
   let currentSpeedY = itemSpeedY;
-  if (keys.down) {
+  if (keys.shift) {
+    // Shift = speed up (3x faster while held)
+    currentSpeedY *= 3;
+  } else if (keys.down) {
+    // Down arrow = slightly faster
     currentSpeedY *= 1.5;
   }
   
   // Update vertical position
   itemY += currentSpeedY;
+  
+  // Animate clouds (move slowly to the right)
+  animationFrame++;
+  cloudPositions.forEach(cloud => {
+    cloud.x += 0.1; // Slow movement
+    // Wrap around when cloud goes off screen
+    if (cloud.x > canvas.width + cloud.size) {
+      cloud.x = -cloud.size;
+    }
+  });
   
   // Check collision with bins
   if (itemY + itemHeight >= bins[0].y) {
@@ -562,6 +649,10 @@ function checkBinCollision() {
           message = `Awesome! You got it right!`;
           educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
+          // Flash green for correct answer
+          flashColor = "green";
+          flashTimer = flashDuration;
+          
           // All items proceed to Phase 2 (code sorting)
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
@@ -571,7 +662,7 @@ function checkBinCollision() {
             codePhaseCategory = currentItem.category; // Remember which category we're sorting
             setupBins();
             itemX = canvas.width / 2 - itemWidth / 2;
-            itemY = 50;
+            itemY = 200; // Start below the "Recycle this [item]!" text
             showEducationalContent();
           }, 2000);
         } else {
@@ -580,6 +671,11 @@ function checkBinCollision() {
           const wrongInfo = bin.info;
           message = `Oops! Try again!`;
           educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
+          
+          // Flash red for incorrect answer
+          flashColor = "red";
+          flashTimer = flashDuration;
+          
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           resetItem();
@@ -589,8 +685,13 @@ function checkBinCollision() {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           score++;
-          message = `You're a recycling superstar!`;
+          message = `Awesome! You got it right!`;
           educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
+          
+          // Flash green for correct answer
+          flashColor = "green";
+          flashTimer = flashDuration;
+          
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
@@ -606,6 +707,11 @@ function checkBinCollision() {
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
           message = `Almost there! Keep trying!`;
           educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
+          
+          // Flash red for incorrect answer
+          flashColor = "red";
+          flashTimer = flashDuration;
+          
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           resetItem();
@@ -618,7 +724,7 @@ function checkBinCollision() {
 
 function resetItem() {
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 50;
+  itemY = 200; // Start below the "Recycle this [item]!" text
 }
 
 // ============================================================================
@@ -640,7 +746,7 @@ function roundedRect(x, y, width, height, radius) {
 }
 
 function render() {
-  // Clear canvas with sky gradient
+  // Draw sky gradient background
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, "#87CEEB");
   gradient.addColorStop(1, "#E0F6FF");
@@ -658,9 +764,9 @@ function render() {
   roundedRect(10, 10, canvas.width - 20, 50, 15);
   ctx.fill();
   
-  // Draw phase text
-  ctx.fillStyle = "#4A5568";
-  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  // Draw phase text (left side)
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
   
   let phaseText = "Step 1: Pick the right bin!";
@@ -669,8 +775,15 @@ function render() {
   }
   ctx.fillText(phaseText, 25, 42);
   
-  // Draw score badge
-  ctx.fillStyle = "#FF6B9D";
+  // Draw location text (after phase text with spacing)
+  ctx.fillStyle = "#666";
+  ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  const phaseTextWidth = ctx.measureText(phaseText).width;
+  const locationX = 25 + phaseTextWidth + 25 + 50;
+  ctx.fillText(gameLocation, locationX, 42);
+  
+  // Draw score badge (right side)
+  ctx.fillStyle = "#FFD700";
   roundedRect(canvas.width - 140, 15, 120, 40, 20);
   ctx.fill();
   
@@ -680,6 +793,23 @@ function render() {
   ctx.fillText(`Score: ${score}`, canvas.width - 80, 40);
   ctx.textAlign = "left";
   
+  // Draw info button (circular icon) - positioned between location and score
+  const infoButtonX = canvas.width - 160;
+  const infoButtonY = 30 + 4;
+  const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
+  
+  ctx.fillStyle = "#2196F3";
+  ctx.beginPath();
+  ctx.arc(infoButtonX, infoButtonY, infoButtonRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw "i" icon
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial"; // Scaled down font
+  ctx.textAlign = "center";
+  ctx.fillText("i", infoButtonX, infoButtonY + 4); // Adjusted vertical offset
+  ctx.textAlign = "left";
+  
   // Draw educational message in friendly speech bubble (with proper spacing)
   if (educationalMessage) {
     drawSpeechBubble(educationalMessage, canvas.width / 2, 90, canvas.width - 60);
@@ -687,7 +817,7 @@ function render() {
   
   // Draw feedback message (with proper spacing to avoid overlap)
   if (message) {
-    const isCorrect = message.includes("Awesome") || message.includes("superstar");
+    const isCorrect = message.includes("Awesome");
     ctx.fillStyle = isCorrect ? "#4CAF50" : "#FF9800";
     ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
@@ -696,30 +826,56 @@ function render() {
     ctx.textAlign = "left";
   }
   
-  // Draw bins with educational info
+  // Draw item FIRST (so it appears behind bins when overlapping)
+  // Only draw item if it's not behind a bin
+  if (currentItem) {
+    // Check if item is behind any bin (item Y position is below bin top)
+    let itemBehindBin = false;
+    if (bins.length > 0) {
+      const binTop = bins[0].y;
+      if (itemY + itemHeight > binTop) {
+        itemBehindBin = true;
+      }
+    }
+    
+    // Only draw item if it's not behind a bin
+    if (!itemBehindBin) {
+      drawItem();
+    }
+  }
+  
+  // Draw bins AFTER items (so bins appear on top, like items going into them)
   for (const bin of bins) {
     drawBin(bin);
   }
   
-  // Draw item with prominent plastic code
-  if (currentItem) {
-    drawItem();
+  // Draw flash effect overlay on top of everything
+  if (flashColor === "green") {
+    // Green flash for correct
+    const alpha = flashTimer / flashDuration; // Fade out
+    ctx.fillStyle = `rgba(76, 175, 80, ${0.4 * alpha})`; // Green with fade
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else if (flashColor === "red") {
+    // Red flash for incorrect
+    const alpha = flashTimer / flashDuration; // Fade out
+    ctx.fillStyle = `rgba(244, 67, 54, ${0.4 * alpha})`; // Red with fade
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
   // Draw friendly instructions
   ctx.fillStyle = "#666666";
   ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "right";
-  ctx.fillText("SPACE: hints | ENTER: drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
+  ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
   ctx.textAlign = "left";
 }
 
 function drawClouds() {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-  // Cloud 1
-  drawCloud(100, 50, 60);
-  drawCloud(300, 80, 40);
-  drawCloud(600, 60, 50);
+  // Draw clouds using animated positions
+  cloudPositions.forEach(cloud => {
+    drawCloud(cloud.x, cloud.y, cloud.size);
+  });
 }
 
 function drawCloud(x, y, size) {
@@ -905,44 +1061,19 @@ function drawBin(bin) {
       // Fallback to drawn symbol if image not loaded
       drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
     }
-    
-    // Show examples at the bottom if hints are on
-    if (showHints && bin.info) {
-      const examplesList = bin.info.examples.split(",").slice(0, 2).map(e => e.trim());
-      ctx.font = "11px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-      let yOffset = bin.y + bin.height - 25;
-      // Draw from bottom up
-      for (let i = examplesList.length - 1; i >= 0; i--) {
-        ctx.fillText(examplesList[i], centerX, yOffset);
-        yOffset -= 13;
-      }
-    }
   } else {
-    // Code phase: show label at top, symbol in center, examples at bottom
+    // Code phase: show label at top, symbol in center
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
     ctx.fillText(bin.label, centerX, bin.y + 20);
     
-    // Draw recycling symbol in center (or could be the code number)
+    // Draw recycling symbol in center
     if (recycleSymbolImage) {
       const symbolSize = 35;
       const symbolX = centerX - symbolSize / 2;
       const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
       ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
-    }
-    
-    // Show examples at bottom if hints are on
-    if (showHints && bin.info && bin.info.common) {
-      const examplesList = bin.info.common.split(",").slice(0, 2).map(e => e.trim());
-      ctx.font = "11px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-      let yOffset = bin.y + bin.height - 25;
-      for (let i = examplesList.length - 1; i >= 0; i--) {
-        ctx.fillText(examplesList[i], centerX, yOffset);
-        yOffset -= 13;
-      }
     }
   }
   
@@ -968,7 +1099,8 @@ function darkenColor(color, percent) {
 
 function drawItem() {
   // Use the pre-selected image variant for this item
-  if (currentItemImage && imagesLoaded) {
+  // Check if image exists and is loaded (complete property indicates it's loaded)
+  if (currentItemImage && currentItemImage.complete && currentItemImage.naturalWidth > 0) {
     // Draw item image - just the image, no box, preserve aspect ratio
     ctx.save();
     
