@@ -90,6 +90,18 @@ const ITEMS = [
     code: 2,
     category: "green",
     description: "Made from HDPE #2 - widely recyclable!"
+  },
+  {
+    name: "PVC pipe",
+    code: 3,                // PVC
+    category: "red",
+    description: "Made from PVC #3 - not recyclable curbside"
+  },
+  {
+    name: "Mixed plastic",
+    code: 7,                // Other
+    category: "red",
+    description: "Made from mixed plastic #7 - not recyclable curbside"
   }
 ];
 
@@ -97,6 +109,7 @@ const ITEMS = [
 // GAME STATE
 // ============================================================================
 let currentItem = null;
+let currentItemImage = null; // Store the selected image variant for current item
 let itemX = 0;
 let itemY = 0;
 let itemSpeedY = 0.5;
@@ -117,6 +130,10 @@ let educationalDuration = 300; // Longer for educational content
 let bins = [];
 let showHints = true;  // Show educational hints
 
+// Image loading
+const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
+let imagesLoaded = false;
+
 // Keyboard state
 const keys = {
   left: false,
@@ -130,6 +147,7 @@ const keys = {
 // INITIALIZATION
 // ============================================================================
 function initGame() {
+  loadImages();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
   itemY = 50;
@@ -137,9 +155,139 @@ function initGame() {
   gameLoop();
 }
 
+// Load images for items
+function loadImages() {
+  let loadedCount = 0;
+  const uniqueItems = {}; // Track unique item names to avoid loading duplicates
+  
+  // First, identify unique items
+  ITEMS.forEach(item => {
+    if (!uniqueItems[item.name]) {
+      uniqueItems[item.name] = item;
+    }
+  });
+  
+  const totalItems = Object.keys(uniqueItems).length;
+  let itemsProcessed = 0;
+  
+  // Load images for each unique item
+  Object.values(uniqueItems).forEach(item => {
+    const imageName = item.name.toLowerCase().replace(/\s+/g, '-');
+    
+    // Special handling for items with multiple variants
+    if (item.name === "Water bottle") {
+      const variants = [];
+      let variantsLoaded = 0;
+      const totalVariants = 5;
+      
+      for (let i = 1; i <= totalVariants; i++) {
+        const img = new Image();
+        img.src = `images/${imageName}-${i}.png`;
+        
+        img.onload = () => {
+          variants.push(img);
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            itemImages[item.name] = variants;
+            itemsProcessed++;
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+        
+        img.onerror = () => {
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            // If no variants loaded, use fallback
+            if (variants.length > 0) {
+              itemImages[item.name] = variants;
+            }
+            itemsProcessed++;
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+      }
+    } else if (item.name === "Milk jug") {
+      const variants = [];
+      let variantsLoaded = 0;
+      const totalVariants = 3;
+      
+      for (let i = 1; i <= totalVariants; i++) {
+        const img = new Image();
+        img.src = `images/${imageName}-${i}.png`;
+        
+        img.onload = () => {
+          variants.push(img);
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            itemImages[item.name] = variants;
+            itemsProcessed++;
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+        
+        img.onerror = () => {
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            // If no variants loaded, use fallback
+            if (variants.length > 0) {
+              itemImages[item.name] = variants;
+            }
+            itemsProcessed++;
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+      }
+    } else {
+      // Regular single image loading
+      const img = new Image();
+      img.src = `images/${imageName}.png`;
+      
+      img.onload = () => {
+        itemImages[item.name] = img;
+        itemsProcessed++;
+        if (itemsProcessed === totalItems) {
+          imagesLoaded = true;
+        }
+      };
+      
+      img.onerror = () => {
+        // If image fails to load, we'll use the fallback drawing
+        console.log(`Image not found: images/${imageName}.png - using fallback`);
+        itemsProcessed++;
+        if (itemsProcessed === totalItems) {
+          imagesLoaded = true;
+        }
+      };
+    }
+  });
+}
+
 function pickRandomItem() {
   const randomIndex = Math.floor(Math.random() * ITEMS.length);
   currentItem = ITEMS[randomIndex];
+  
+  // Select image variant for this item
+  const itemImageData = itemImages[currentItem.name];
+  if (itemImageData) {
+    if (Array.isArray(itemImageData)) {
+      // For items with multiple variants (like water bottles), randomly pick one
+      const randomVariantIndex = Math.floor(Math.random() * itemImageData.length);
+      currentItemImage = itemImageData[randomVariantIndex];
+    } else {
+      currentItemImage = itemImageData;
+    }
+  } else {
+    currentItemImage = null;
+  }
+  
   // Show educational message when new item appears
   showEducationalContent();
 }
@@ -148,7 +296,7 @@ function showEducationalContent() {
   if (!currentItem) return;
   
   const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
-  educationalMessage = `${currentItem.name}: Plastic #${currentItem.code} (${codeInfo.name})`;
+  educationalMessage = `Look! It's a ${currentItem.name}! Can you see the number ${currentItem.code}? That's the plastic code!`;
   educationalTimer = educationalDuration;
 }
 
@@ -397,8 +545,8 @@ function checkBinCollision() {
         if (bin.category === currentItem.category) {
           // Correct category!
           const categoryInfo = CATEGORY_INFO[currentItem.category];
-          message = `✓ Correct! ${currentItem.name} goes in ${bin.label}`;
-          educationalMessage = `${categoryInfo.description}. ${currentItem.description}`;
+          message = `Awesome! You got it right!`;
+          educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
           // All items proceed to Phase 2 (code sorting)
           messageTimer = messageDuration;
@@ -416,8 +564,8 @@ function checkBinCollision() {
           // Wrong bin - teach them!
           const correctInfo = CATEGORY_INFO[currentItem.category];
           const wrongInfo = bin.info;
-          message = `✗ Wrong! ${currentItem.name} is ${currentItem.category}, not ${bin.category}`;
-          educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. ${correctInfo.description}. ${correctInfo.codes}`;
+          message = `Oops! Try again!`;
+          educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           resetItem();
@@ -427,22 +575,23 @@ function checkBinCollision() {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           score++;
-          message = `✓ Perfect! ${currentItem.name} is plastic #${currentItem.code}`;
-          educationalMessage = `${codeInfo.name}. ${codeInfo.common}. ${currentItem.description}`;
+          message = `You're a recycling superstar!`;
+          educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
           setTimeout(() => {
             pickRandomItem();
             phase = "category";
+            codePhaseCategory = null; // Reset category tracking
             setupBins();
             resetItem();
           }, 3000);
         } else {
           // Wrong code - teach them!
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
-          message = `✗ Wrong! ${currentItem.name} is plastic #${currentItem.code}, not #${bin.code}`;
-          educationalMessage = `Hint: Look at the plastic code on the item. ${currentItem.name} is ${correctInfo.name} (#${currentItem.code})`;
+          message = `Almost there! Keep trying!`;
+          educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           resetItem();
@@ -461,50 +610,75 @@ function resetItem() {
 // ============================================================================
 // RENDERING
 // ============================================================================
+// Helper function to draw rounded rectangles
+function roundedRect(x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 function render() {
-  // Clear canvas
-  ctx.fillStyle = "#16213e";
+  // Clear canvas with sky gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, "#87CEEB");
+  gradient.addColorStop(1, "#E0F6FF");
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw clouds in background
+  drawClouds();
   
   // Draw educational header
   drawEducationalHeader();
   
-  // Draw UI text
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 18px Arial";
+  // Draw friendly header with rounded background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+  roundedRect(10, 10, canvas.width - 20, 50, 15);
+  ctx.fill();
+  
+  // Draw phase text
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
   
-  let phaseText = "Phase 1: Choose the recycling category";
+  let phaseText = "Step 1: Pick the right bin!";
   if (phase === "code") {
-    const categoryName = codePhaseCategory === "green" ? "Green" : 
-                         codePhaseCategory === "orange" ? "Orange" : "Red";
-    phaseText = `Phase 2: Choose the plastic code (${categoryName} items)`;
+    phaseText = "Step 2: Find the plastic number!";
   }
-  ctx.fillText(phaseText, 20, 30);
+  ctx.fillText(phaseText, 25, 42);
   
-  ctx.font = "16px Arial";
-  ctx.fillText(`Score: ${score}`, canvas.width - 120, 30);
+  // Draw score badge
+  ctx.fillStyle = "#FF6B9D";
+  roundedRect(canvas.width - 140, 15, 120, 40, 20);
+  ctx.fill();
   
-  // Draw educational message
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`Score: ${score}`, canvas.width - 80, 40);
+  ctx.textAlign = "left";
+  
+  // Draw educational message in friendly speech bubble (with proper spacing)
   if (educationalMessage) {
-    ctx.fillStyle = "#87CEEB";
-    ctx.font = "14px Arial";
-    ctx.textAlign = "center";
-    const lines = wrapText(ctx, educationalMessage, canvas.width - 40, 20);
-    let yPos = 60;
-    for (const line of lines) {
-      ctx.fillText(line, canvas.width / 2, yPos);
-      yPos += 18;
-    }
-    ctx.textAlign = "left";
+    drawSpeechBubble(educationalMessage, canvas.width / 2, 90, canvas.width - 60);
   }
   
-  // Draw feedback message
+  // Draw feedback message (with proper spacing to avoid overlap)
   if (message) {
-    ctx.fillStyle = message.startsWith("✓") ? "#90EE90" : "#FF6B6B";
-    ctx.font = "bold 20px Arial";
+    const isCorrect = message.includes("Awesome") || message.includes("superstar");
+    ctx.fillStyle = isCorrect ? "#4CAF50" : "#FF9800";
+    ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
-    ctx.fillText(message, canvas.width / 2, 140);
+    
+    ctx.fillText(message, canvas.width / 2, 170);
     ctx.textAlign = "left";
   }
   
@@ -518,77 +692,230 @@ function render() {
     drawItem();
   }
   
-  // Draw instructions
-  ctx.fillStyle = "#888888";
-  ctx.font = "12px Arial";
+  // Draw friendly instructions
+  ctx.fillStyle = "#666666";
+  ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "right";
-  ctx.fillText("SPACE: toggle hints | ENTER: drop into bin", canvas.width - 10, canvas.height - 25);
-  ctx.fillText("Arrow keys: move item", canvas.width - 10, canvas.height - 10);
+  ctx.fillText("SPACE: hints | ENTER: drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
+  ctx.textAlign = "left";
+}
+
+function drawClouds() {
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  // Cloud 1
+  drawCloud(100, 50, 60);
+  drawCloud(300, 80, 40);
+  drawCloud(600, 60, 50);
+}
+
+function drawCloud(x, y, size) {
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.6, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.5, y, size * 0.7, 0, Math.PI * 2);
+  ctx.arc(x + size, y, size * 0.6, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.3, y - size * 0.3, size * 0.5, 0, Math.PI * 2);
+  ctx.arc(x + size * 0.7, y - size * 0.3, size * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSpeechBubble(text, x, y, maxWidth) {
+  const lines = wrapText(ctx, text, maxWidth, 15);
+  const padding = 12;
+  const lineHeight = 18;
+  const bubbleHeight = lines.length * lineHeight + padding * 2;
+  const bubbleWidth = maxWidth + padding * 2;
+  
+  const bubbleX = x - bubbleWidth / 2;
+  const bubbleY = y - bubbleHeight / 2;
+  
+  // Draw bubble with rounded corners
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 15);
+  ctx.fill();
+  
+  // Add border
+  ctx.strokeStyle = "#FFD700";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // Draw text
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "15px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  let yPos = bubbleY + padding + 15;
+  for (const line of lines) {
+    ctx.fillText(line, x, yPos);
+    yPos += lineHeight;
+  }
   ctx.textAlign = "left";
 }
 
 function drawEducationalHeader() {
-  // Draw a subtle header bar
-  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-  ctx.fillRect(0, 0, canvas.width, 160);
-  
-  // Draw category legend if in category phase
+  // Draw category legend if in category phase (positioned to avoid overlap)
   if (phase === "category" && showHints) {
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 14px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Princeton Recycling Guide:", 20, 180);
+    const boxX = 20;
+    const boxY = 200; // Moved down to avoid overlap with messages
+    const boxWidth = canvas.width - 40;
+    const boxHeight = 100;
     
-    ctx.font = "12px Arial";
-    let yPos = 200;
+    // Draw friendly info box
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    roundedRect(boxX, boxY, boxWidth, boxHeight, 15);
+    ctx.fill();
+    
+    ctx.strokeStyle = "#FFD700";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "left";
+    ctx.fillText("Princeton Recycling Guide:", boxX + 15, boxY + 25);
+    
+    ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    let yPos = boxY + 50;
     for (const [key, info] of Object.entries(CATEGORY_INFO)) {
-      ctx.fillStyle = info.name.includes("Green") ? "#4CAF50" : 
-                      info.name.includes("Orange") ? "#FF9800" : "#F44336";
-      ctx.fillText(`• ${info.name}: ${info.description}`, 30, yPos);
-      yPos += 20;
+      const color = info.name.includes("Green") ? "#4CAF50" : 
+                    info.name.includes("Orange") ? "#FF9800" : "#F44336";
+      ctx.fillStyle = color;
+      ctx.fillText(`${info.name}: ${info.description}`, boxX + 20, yPos);
+      yPos += 22;
     }
   }
 }
 
+// Draw recycling symbol (3 chasing arrows)
+function drawRecyclingSymbol(x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  
+  const outerRadius = size * 0.45;
+  const innerRadius = size * 0.25;
+  const arrowLength = size * 0.2;
+  
+  // Draw 3 curved arrows forming a triangle
+  for (let i = 0; i < 3; i++) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((i * Math.PI * 2) / 3 - Math.PI / 6);
+    
+    ctx.beginPath();
+    
+    // Start from inner radius
+    const startAngle = Math.PI / 3;
+    const endAngle = Math.PI / 3 + Math.PI * 2 / 3;
+    
+    // Outer arc (curved part of arrow)
+    ctx.arc(0, 0, outerRadius, startAngle, endAngle);
+    
+    // Arrow head at the end
+    const tipAngle = endAngle;
+    const tipX = Math.cos(tipAngle) * outerRadius;
+    const tipY = Math.sin(tipAngle) * outerRadius;
+    
+    // Draw arrow head pointing outward
+    const arrowAngle1 = tipAngle + Math.PI / 2;
+    const arrowAngle2 = tipAngle - Math.PI / 2;
+    
+    ctx.lineTo(
+      tipX + Math.cos(arrowAngle1) * arrowLength,
+      tipY + Math.sin(arrowAngle1) * arrowLength
+    );
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX + Math.cos(arrowAngle2) * arrowLength,
+      tipY + Math.sin(arrowAngle2) * arrowLength
+    );
+    
+    ctx.stroke();
+    
+    // Fill arrow head
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX + Math.cos(arrowAngle1) * arrowLength,
+      tipY + Math.sin(arrowAngle1) * arrowLength
+    );
+    ctx.lineTo(
+      tipX + Math.cos(arrowAngle2) * arrowLength,
+      tipY + Math.sin(arrowAngle2) * arrowLength
+    );
+    ctx.closePath();
+    ctx.fill();
+    
+    // Inner arc (tail of arrow)
+    ctx.beginPath();
+    ctx.arc(0, 0, innerRadius, startAngle, endAngle, true);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  ctx.restore();
+}
+
 function drawBin(bin) {
-  // Bin rectangle
-  ctx.fillStyle = bin.color;
-  ctx.fillRect(bin.x, bin.y, bin.width, bin.height);
+  // Create gradient for bin
+  const binGradient = ctx.createLinearGradient(bin.x, bin.y, bin.x, bin.y + bin.height);
+  const baseColor = bin.color;
+  binGradient.addColorStop(0, lightenColor(baseColor, 20));
+  binGradient.addColorStop(1, darkenColor(baseColor, 10));
   
-  // Bin border
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(bin.x, bin.y, bin.width, bin.height);
+  // Draw bin with rounded corners
+  ctx.fillStyle = binGradient;
+  roundedRect(bin.x, bin.y, bin.width, bin.height, 20);
+  ctx.fill();
   
-  // Bin label
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 22px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(bin.label, bin.x + bin.width / 2, bin.y + 30);
+  // Bin border with glow
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  // Inner highlight
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 2;
+  roundedRect(bin.x + 2, bin.y + 2, bin.width - 4, bin.height - 4, 18);
+  ctx.stroke();
+  
+  // Draw bin label - recycling symbol for category phase, text for code phase
+  if (phase === "category") {
+    // Draw recycling symbol (3 chasing arrows)
+    drawRecyclingSymbol(bin.x + bin.width / 2, bin.y + 35, 30, "#FFFFFF");
+  } else {
+    // Draw text label for code phase
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 26px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(bin.label, bin.x + bin.width / 2, bin.y + 35);
+  }
   
   // Show educational info if hints are on
   if (showHints && bin.info) {
-    ctx.font = "11px Arial";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.font = "12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
     
     if (phase === "category") {
       // Show codes for this category
-      ctx.fillText(bin.info.codes, bin.x + bin.width / 2, bin.y + 50);
+      ctx.fillText(bin.info.codes, bin.x + bin.width / 2, bin.y + 55);
       // Show examples
-      const examples = wrapText(ctx, bin.info.examples, bin.width - 10, 11);
-      let yOffset = bin.y + 70;
+      const examples = wrapText(ctx, bin.info.examples, bin.width - 15, 12);
+      let yOffset = bin.y + 75;
       for (const line of examples) {
         ctx.fillText(line, bin.x + bin.width / 2, yOffset);
-        yOffset += 12;
+        yOffset += 14;
       }
     } else {
       // Show plastic code info
       if (bin.info.common) {
-        const common = wrapText(ctx, bin.info.common, bin.width - 10, 11);
-        let yOffset = bin.y + 50;
+        const common = wrapText(ctx, bin.info.common, bin.width - 15, 12);
+        let yOffset = bin.y + 55;
         for (const line of common) {
           ctx.fillText(line, bin.x + bin.width / 2, yOffset);
-          yOffset += 12;
+          yOffset += 14;
         }
       }
     }
@@ -597,55 +924,107 @@ function drawBin(bin) {
   ctx.textAlign = "left";
 }
 
+// Helper functions for color manipulation
+function lightenColor(color, percent) {
+  const num = parseInt(color.replace("#", ""), 16);
+  const r = Math.min(255, (num >> 16) + percent);
+  const g = Math.min(255, ((num >> 8) & 0x00FF) + percent);
+  const b = Math.min(255, (num & 0x0000FF) + percent);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+function darkenColor(color, percent) {
+  const num = parseInt(color.replace("#", ""), 16);
+  const r = Math.max(0, (num >> 16) - percent);
+  const g = Math.max(0, ((num >> 8) & 0x00FF) - percent);
+  const b = Math.max(0, (num & 0x0000FF) - percent);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 function drawItem() {
-  // Item background - color based on category in code phase
-  if (phase === "code") {
-    if (codePhaseCategory === "green") {
-      ctx.fillStyle = "#90EE90"; // light green for recyclable
-    } else if (codePhaseCategory === "orange") {
-      ctx.fillStyle = "#FFE0B2"; // light orange
-    } else if (codePhaseCategory === "red") {
-      ctx.fillStyle = "#FFB3BA"; // light red
+  // Use the pre-selected image variant for this item
+  if (currentItemImage && imagesLoaded) {
+    // Draw item image - just the image, no box, preserve aspect ratio
+    ctx.save();
+    
+    // Calculate aspect ratio and scale to fit while maintaining original proportions
+    const maxWidth = itemWidth;
+    const maxHeight = itemHeight - 20; // Leave room for code label at bottom
+    
+    const imgAspectRatio = currentItemImage.width / currentItemImage.height;
+    const maxAspectRatio = maxWidth / maxHeight;
+    
+    let drawWidth, drawHeight, drawX, drawY;
+    
+    if (imgAspectRatio > maxAspectRatio) {
+      // Image is wider - fit to width
+      drawWidth = maxWidth;
+      drawHeight = maxWidth / imgAspectRatio;
+      drawX = itemX;
+      drawY = itemY + (maxHeight - drawHeight) / 2; // Center vertically
     } else {
-      ctx.fillStyle = "#E0E0E0";
+      // Image is taller - fit to height
+      drawHeight = maxHeight;
+      drawWidth = maxHeight * imgAspectRatio;
+      drawX = itemX + (maxWidth - drawWidth) / 2; // Center horizontally
+      drawY = itemY;
     }
+    
+    // Draw image at original aspect ratio
+    ctx.drawImage(
+      currentItemImage,
+      drawX,
+      drawY,
+      drawWidth,
+      drawHeight
+    );
+    
+    // Draw plastic code badge at bottom
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + itemHeight - 8);
+    
+    ctx.restore();
   } else {
-    ctx.fillStyle = "#E0E0E0";
-  }
-  
-  ctx.fillRect(itemX, itemY, itemWidth, itemHeight);
-  
-  // Item border
-  ctx.strokeStyle = "#333333";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(itemX, itemY, itemWidth, itemHeight);
-  
-  // PLASTIC CODE - Make it HUGE and prominent!
-  ctx.fillStyle = "#000000";
-  ctx.font = "bold 36px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + 45);
-  
-  // Item name
-  ctx.fillStyle = "#000000";
-  ctx.font = "bold 12px Arial";
-  const nameLines = wrapText(ctx, currentItem.name, itemWidth - 10, 12);
-  let yOffset = itemY + 60;
-  for (const line of nameLines) {
-    ctx.fillText(line, itemX + itemWidth / 2, yOffset);
-    yOffset += 14;
-  }
-  
-  // Show plastic code name if hints are on
-  if (showHints && PLASTIC_CODE_INFO[currentItem.code]) {
-    ctx.font = "10px Arial";
-    ctx.fillStyle = "#444444";
-    const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
-    const codeName = wrapText(ctx, codeInfo.name, itemWidth - 10, 10);
-    yOffset = itemY + itemHeight - 8;
-    for (let i = codeName.length - 1; i >= 0; i--) {
-      ctx.fillText(codeName[i], itemX + itemWidth / 2, yOffset);
-      yOffset -= 12;
+    // Fallback: Draw item as before (if images not loaded)
+    let baseColor = "#FFFFFF";
+    if (phase === "code") {
+      if (codePhaseCategory === "green") {
+        baseColor = "#90EE90";
+      } else if (codePhaseCategory === "orange") {
+        baseColor = "#FFE0B2";
+      } else if (codePhaseCategory === "red") {
+        baseColor = "#FFB3BA";
+      }
+    }
+    
+    const itemGradient = ctx.createLinearGradient(itemX, itemY, itemX, itemY + itemHeight);
+    itemGradient.addColorStop(0, lightenColor(baseColor, 15));
+    itemGradient.addColorStop(1, baseColor);
+    
+    ctx.fillStyle = itemGradient;
+    roundedRect(itemX, itemY, itemWidth, itemHeight, 15);
+    ctx.fill();
+    
+    ctx.strokeStyle = "#4A5568";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Draw plastic code
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`#${currentItem.code}`, itemX + itemWidth / 2, itemY + 50);
+    
+    // Item name
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    const nameLines = wrapText(ctx, currentItem.name, itemWidth - 15, 14);
+    let yOffset = itemY + 68;
+    for (const line of nameLines) {
+      ctx.fillText(line, itemX + itemWidth / 2, yOffset);
+      yOffset += 16;
     }
   }
   
@@ -658,7 +1037,7 @@ function wrapText(context, text, maxWidth, fontSize) {
   const lines = [];
   let currentLine = words[0];
   
-  context.font = `${fontSize}px Arial`;
+  context.font = `${fontSize}px 'Comic Sans MS', 'Trebuchet MS', Arial`;
   
   for (let i = 1; i < words.length; i++) {
     const word = words[i];
