@@ -770,7 +770,7 @@ function render() {
   ctx.fillStyle = "#666";
   ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
   const phaseTextWidth = ctx.measureText(phaseText).width;
-  const locationX = 25 + phaseTextWidth + 25 + 50;
+  const locationX = 25 + phaseTextWidth + 25 + 50 + 5;
   ctx.fillText(gameLocation, locationX, 42);
   
   // Draw score badge (right side)
