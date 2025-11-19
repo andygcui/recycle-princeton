@@ -105,8 +105,8 @@ let itemX = 0;
 let itemY = 0;
 let itemSpeedY = 0.5;
 let itemSpeedX = 0;
-let itemWidth = 100;
-let itemHeight = 80;
+let itemWidth = 150;  // Increased from 100
+let itemHeight = 120;  // Increased from 80
 
 let phase = "category";
 let codePhaseCategory = null;  // Track which category we're sorting codes for (green/orange/red)
@@ -121,6 +121,27 @@ let educationalDuration = 300; // Longer for educational content
 let bins = [];
 let showHints = true;  // Show educational hints
 let gameLocation = "Princeton, NJ";  // Store location for display
+let hasCollided = false;  // Prevent multiple collision checks per item
+
+// Game progression
+let level = 1;
+let correctItemsThisLevel = 0;  // Track correct items recycled for current level
+let baseSpeedY = 0.5;  // Base falling speed
+let gameOver = false;
+let gameOverMessage = "";
+
+// Trash pile system
+let trashPileHeight = 0;  // Height of trash pile (0-100, game ends at 100)
+const maxTrashPileHeight = 100;
+
+// Contamination tracking
+let greenBinContaminated = false;
+let contaminationTimer = 0;
+const contaminationDuration = 180;  // frames
+
+// Fake leaderboard and PvP
+let showLeaderboard = false;
+let showPvP = false;
 
 // Animated background elements
 let cloudPositions = [
@@ -181,6 +202,28 @@ function initGame() {
     
     if (distance <= infoButtonRadius) {
       window.location.href = 'info.html';
+    }
+    
+    // Check clicks on leaderboard button (in header)
+    const leaderboardBtnX = 300;
+    const leaderboardBtnY = 20;
+    const leaderboardBtnWidth = 90;
+    const leaderboardBtnHeight = 30;
+    if (x >= leaderboardBtnX && x <= leaderboardBtnX + leaderboardBtnWidth && 
+        y >= leaderboardBtnY && y <= leaderboardBtnY + leaderboardBtnHeight) {
+      showLeaderboard = !showLeaderboard;
+      showPvP = false;
+    }
+    
+    // Check clicks on PvP button (in header)
+    const pvpBtnX = 400;
+    const pvpBtnY = 20;
+    const pvpBtnWidth = 70;
+    const pvpBtnHeight = 30;
+    if (x >= pvpBtnX && x <= pvpBtnX + pvpBtnWidth && 
+        y >= pvpBtnY && y <= pvpBtnY + pvpBtnHeight) {
+      showPvP = !showPvP;
+      showLeaderboard = false;
     }
   });
   
@@ -503,15 +546,16 @@ function setupBins() {
 
 // Function to drop item into bin directly below when Enter is pressed
 function dropIntoBinBelow() {
-  if (!currentItem || bins.length === 0) return;
+  if (!currentItem || bins.length === 0 || hasCollided) return;
   
   const itemCenterX = itemX + itemWidth / 2;
   
   // Find which bin the item is over
   for (const bin of bins) {
     if (itemCenterX >= bin.x && itemCenterX <= bin.x + bin.width) {
-      // Move item to bin position and trigger collision
-      itemY = bin.y - itemHeight - 5;
+      // Move item 60 pixels deep into bin before triggering collision
+      itemY = bin.y + 60 - itemHeight;
+      hasCollided = true;
       checkBinCollision();
       break;
     }
@@ -539,6 +583,22 @@ window.addEventListener("keydown", (e) => {
     keys.enter = true;
     // Instant drop - drop item into bin directly below
     dropIntoBinBelow();
+  }
+  if (e.key === "r" || e.key === "R") {
+    // Restart game
+    if (gameOver) {
+      restartGame();
+    }
+  }
+  if (e.key === "l" || e.key === "L") {
+    // Toggle leaderboard
+    showLeaderboard = !showLeaderboard;
+    showPvP = false;  // Close PvP if open
+  }
+  if (e.key === "p" || e.key === "P") {
+    // Toggle PvP
+    showPvP = !showPvP;
+    showLeaderboard = false;  // Close leaderboard if open
   }
 });
 
@@ -577,6 +637,22 @@ function update() {
     }
   }
   
+  // Update contamination timer
+  if (contaminationTimer > 0) {
+    contaminationTimer--;
+    if (contaminationTimer === 0) {
+      greenBinContaminated = false;
+    }
+  }
+  
+  // Update level-based speed
+  itemSpeedY = baseSpeedY * (1 + (level - 1) * 0.3);  // 30% faster per level
+  
+  // Don't update game if game over
+  if (gameOver) {
+    return;
+  }
+  
   // Handle horizontal movement
   const moveSpeed = 2;
   if (keys.left) {
@@ -605,6 +681,7 @@ function update() {
   }
   
   // Update vertical position
+  // Continue falling even after collision detected, so item goes into bin visually
   itemY += currentSpeedY;
   
   // Animate clouds (move slowly to the right)
@@ -617,13 +694,16 @@ function update() {
     }
   });
   
-  // Check collision with bins
-  if (itemY + itemHeight >= bins[0].y) {
+  // Check collision with bins (only once per item)
+  // Item must go 60 pixels deep into the bin before collision is detected
+  if (!hasCollided && bins.length > 0 && itemY + itemHeight >= bins[0].y + 60) {
+    hasCollided = true;
     checkBinCollision();
   }
   
-  // Reset if item falls off screen
+  // Reset if item falls off screen (adds to trash pile)
   if (itemY > canvas.height) {
+    addToTrashPile();
     resetItem();
   }
 }
@@ -648,14 +728,16 @@ function checkBinCollision() {
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
+          // Let item continue falling into bin, then transition after it's fully in
           setTimeout(() => {
             phase = "code";
             codePhaseCategory = currentItem.category; // Remember which category we're sorting
             setupBins();
             itemX = canvas.width / 2 - itemWidth / 2;
             itemY = 200; // Start below the "Recycle this [item]!" text
+            hasCollided = false;  // Reset collision flag for phase transition
             showEducationalContent();
-          }, 2000);
+          }, 3000); // Increased delay to see item go into bin
         } else {
           // Wrong bin - teach them!
           const correctInfo = CATEGORY_INFO[currentItem.category];
@@ -667,6 +749,20 @@ function checkBinCollision() {
           flashColor = "red";
           flashTimer = flashDuration;
           
+          // If recyclable plastic dropped into red/orange bin, add to trash pile
+          if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
+            addToTrashPile();
+          }
+          
+          // If non-recyclable plastic dropped into green bin, contaminate it
+          if (currentItem.category !== "green" && bin.category === "green") {
+            greenBinContaminated = true;
+            contaminationTimer = contaminationDuration;
+            addToTrashPile();
+          } else {
+            addToTrashPile();  // Any wrong bin adds to trash pile
+          }
+          
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           resetItem();
@@ -676,6 +772,7 @@ function checkBinCollision() {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           score++;
+          checkLevelProgression();
           message = `Awesome! You got it right!`;
           educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
           
@@ -686,13 +783,13 @@ function checkBinCollision() {
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
-          setTimeout(() => {
-            pickRandomItem();
-            phase = "category";
-            codePhaseCategory = null; // Reset category tracking
-            setupBins();
-            resetItem();
-          }, 3000);
+          // Immediately transition to new item (no delay)
+          pickRandomItem();
+          phase = "category";
+          codePhaseCategory = null; // Reset category tracking
+          setupBins();
+          resetItem();
+          hasCollided = false;  // Reset collision flag for new item
         } else {
           // Wrong code - teach them!
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
@@ -702,6 +799,9 @@ function checkBinCollision() {
           // Flash red for incorrect answer
           flashColor = "red";
           flashTimer = flashDuration;
+          
+          // Wrong code adds to trash pile
+          addToTrashPile();
           
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
@@ -716,6 +816,62 @@ function checkBinCollision() {
 function resetItem() {
   itemX = canvas.width / 2 - itemWidth / 2;
   itemY = 200; // Start below the "Recycle this [item]!" text
+  hasCollided = false;  // Reset collision flag
+}
+
+// Add to trash pile when item is missed or incorrectly sorted
+function addToTrashPile() {
+  trashPileHeight += 5;  // Add 5% to trash pile
+  if (trashPileHeight >= maxTrashPileHeight) {
+    endGame(false);  // Game over - lose
+  }
+}
+
+// End game (win or lose)
+function endGame(won) {
+  gameOver = true;
+  if (won) {
+    gameOverMessage = "Congratulations! You're a recycling champion!";
+  } else {
+    gameOverMessage = "Game Over! The trash pile got too high. Try again!";
+  }
+}
+
+// Restart game
+function restartGame() {
+  gameOver = false;
+  gameOverMessage = "";
+  score = 0;
+  level = 1;
+  correctItemsThisLevel = 0;
+  trashPileHeight = 0;
+  greenBinContaminated = false;
+  contaminationTimer = 0;
+  phase = "category";
+  codePhaseCategory = null;
+  itemSpeedY = baseSpeedY;
+  hasCollided = false;
+  pickRandomItem();
+  itemX = canvas.width / 2 - itemWidth / 2;
+  itemY = 200;
+  setupBins();
+  message = "";
+  educationalMessage = "";
+  messageTimer = 0;
+  educationalTimer = 0;
+}
+
+// Check for level progression - need n correct items to go from level n to n+1
+function checkLevelProgression() {
+  correctItemsThisLevel++;
+  
+  // To go from level n to level n+1, you need n correct items
+  if (correctItemsThisLevel >= level) {
+    level++;
+    correctItemsThisLevel = 0;  // Reset counter for next level
+    message = `Level ${level}! Items fall faster now!`;
+    messageTimer = messageDuration;
+  }
 }
 
 // ============================================================================
@@ -755,36 +911,52 @@ function render() {
   roundedRect(10, 10, canvas.width - 20, 50, 15);
   ctx.fill();
   
-  // Draw phase text (left side)
-  ctx.fillStyle = "#2D3748";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "left";
-  
-  let phaseText = "Step 1: Pick the right bin!";
-  if (phase === "code") {
-    phaseText = "Step 2: Find the plastic number!";
-  }
-  ctx.fillText(phaseText, 25, 42);
-  
-  // Draw location text (after phase text with spacing)
+  // Draw location text (left side)
   ctx.fillStyle = "#666";
   ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  const phaseTextWidth = ctx.measureText(phaseText).width;
-  const locationX = 25 + phaseTextWidth + 25 + 50 + 5;
-  ctx.fillText(gameLocation, locationX, 42);
+  ctx.textAlign = "left";
+  ctx.fillText(gameLocation, 25, 42);
   
-  // Draw score badge (right side)
-  ctx.fillStyle = "#FFD700";
-  roundedRect(canvas.width - 140, 15, 120, 40, 20);
+  // Draw Level indicator (left-center)
+  const levelX = 200;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  roundedRect(levelX, 20, 80, 30, 8);
   ctx.fill();
-  
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText(`Score: ${score}`, canvas.width - 80, 40);
+  ctx.fillText(`Level ${level}`, levelX + 40, 40);
   ctx.textAlign = "left";
   
-  // Draw info button (circular icon) - positioned between location and score
+  // Draw Leaderboard button (center-left)
+  const leaderboardBtnX = 300;
+  const leaderboardBtnY = 20;
+  const leaderboardBtnWidth = 90;
+  const leaderboardBtnHeight = 30;
+  ctx.fillStyle = showLeaderboard ? "#4CAF50" : "rgba(255, 255, 255, 0.9)";
+  roundedRect(leaderboardBtnX, leaderboardBtnY, leaderboardBtnWidth, leaderboardBtnHeight, 8);
+  ctx.fill();
+  ctx.fillStyle = showLeaderboard ? "#FFFFFF" : "#2D3748";
+  ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Leaderboard", leaderboardBtnX + leaderboardBtnWidth / 2, leaderboardBtnY + leaderboardBtnHeight / 2 + 4);
+  ctx.textAlign = "left";
+  
+  // Draw PvP button (center-right)
+  const pvpBtnX = 400;
+  const pvpBtnY = 20;
+  const pvpBtnWidth = 70;
+  const pvpBtnHeight = 30;
+  ctx.fillStyle = showPvP ? "#2196F3" : "rgba(255, 255, 255, 0.9)";
+  roundedRect(pvpBtnX, pvpBtnY, pvpBtnWidth, pvpBtnHeight, 8);
+  ctx.fill();
+  ctx.fillStyle = showPvP ? "#FFFFFF" : "#2D3748";
+  ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("PvP", pvpBtnX + pvpBtnWidth / 2, pvpBtnY + pvpBtnHeight / 2 + 4);
+  ctx.textAlign = "left";
+  
+  // Draw info button (circular icon) - positioned before score
   const infoButtonX = canvas.width - 160;
   const infoButtonY = 30 + 4;
   const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
@@ -799,6 +971,17 @@ function render() {
   ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial"; // Scaled down font
   ctx.textAlign = "center";
   ctx.fillText("i", infoButtonX, infoButtonY + 4); // Adjusted vertical offset
+  ctx.textAlign = "left";
+  
+  // Draw score badge (right side)
+  ctx.fillStyle = "#FFD700";
+  roundedRect(canvas.width - 140, 15, 120, 40, 20);
+  ctx.fill();
+  
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`Score: ${score}`, canvas.width - 80, 40);
   ctx.textAlign = "left";
   
   // Draw educational message in friendly speech bubble (with proper spacing)
@@ -818,19 +1001,20 @@ function render() {
   }
   
   // Draw item FIRST (so it appears behind bins when overlapping)
-  // Only draw item if it's not behind a bin
+  // Draw item even when it's going into the bin (up to 60 pixels deep)
   if (currentItem) {
-    // Check if item is behind any bin (item Y position is below bin top)
-    let itemBehindBin = false;
+    let shouldDrawItem = true;
     if (bins.length > 0) {
       const binTop = bins[0].y;
-      if (itemY + itemHeight > binTop) {
-        itemBehindBin = true;
+      const itemBottom = itemY + itemHeight;
+      // Only hide item if it's gone too deep (more than 60 pixels into bin)
+      if (itemBottom > binTop + 60) {
+        shouldDrawItem = false;
       }
     }
     
-    // Only draw item if it's not behind a bin
-    if (!itemBehindBin) {
+    // Draw item if it should be visible
+    if (shouldDrawItem) {
       drawItem();
     }
   }
@@ -853,11 +1037,176 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
+  // Draw trash pile in background
+  drawTrashPile();
+  
+  // Draw fake leaderboard if shown
+  if (showLeaderboard) {
+    drawFakeLeaderboard();
+  }
+  
+  // Draw fake PvP if shown
+  if (showPvP) {
+    drawFakePvP();
+  }
+  
+  // Draw game over screen
+  if (gameOver) {
+    drawGameOverScreen();
+  }
+  
   // Draw friendly instructions
   ctx.fillStyle = "#666666";
   ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "right";
   ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
+  ctx.textAlign = "left";
+}
+
+function drawTrashPile() {
+  if (trashPileHeight <= 0) return;
+  
+  const pileX = 20;
+  const pileY = canvas.height - 40;
+  const pileWidth = 120;
+  const pileHeight = (trashPileHeight / maxTrashPileHeight) * 200;  // Max height 200px
+  const actualPileY = pileY - pileHeight;
+  
+  // Draw trash pile as a messy stack
+  ctx.fillStyle = "#5D4037";
+  ctx.beginPath();
+  ctx.moveTo(pileX, pileY);
+  ctx.lineTo(pileX + pileWidth, pileY);
+  ctx.lineTo(pileX + pileWidth - 10, actualPileY);
+  ctx.lineTo(pileX + 10, actualPileY);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Add some trash items sticking out
+  ctx.fillStyle = "#8D6E63";
+  for (let i = 0; i < 5; i++) {
+    const offsetX = pileX + (i * 20) + Math.sin(i) * 5;
+    const offsetY = actualPileY + Math.cos(i) * 3;
+    ctx.fillRect(offsetX, offsetY, 15, 10);
+  }
+  
+  // Draw trash pile label
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(`Trash: ${Math.round(trashPileHeight)}%`, pileX, actualPileY - 5);
+}
+
+
+function drawFakeLeaderboard() {
+  const panelX = canvas.width / 2 - 200;
+  const panelY = canvas.height / 2 - 150;
+  const panelWidth = 400;
+  const panelHeight = 300;
+  
+  // Background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  ctx.strokeStyle = "#FFD700";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  
+  // Title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Top Recyclers", panelX + panelWidth / 2, panelY + 35);
+  
+  // Fake scores
+  const fakeScores = [
+    { name: "EcoHero123", score: 847 },
+    { name: "GreenGamer", score: 723 },
+    { name: "RecycleKing", score: 689 },
+    { name: "You", score: score },
+    { name: "PlanetSaver", score: 456 }
+  ].sort((a, b) => b.score - a.score);
+  
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  let yPos = panelY + 80;
+  fakeScores.forEach((entry, index) => {
+    const isYou = entry.name === "You";
+    ctx.fillStyle = isYou ? "#4CAF50" : "#2D3748";
+    ctx.textAlign = "left";
+    ctx.fillText(`${index + 1}. ${entry.name}`, panelX + 30, yPos);
+    ctx.textAlign = "right";
+    ctx.fillText(`${entry.score}`, panelX + panelWidth - 30, yPos);
+    yPos += 35;
+  });
+  
+  ctx.textAlign = "left";
+}
+
+function drawFakePvP() {
+  const panelX = canvas.width / 2 - 200;
+  const panelY = canvas.height / 2 - 100;
+  const panelWidth = 400;
+  const panelHeight = 200;
+  
+  // Background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  ctx.strokeStyle = "#2196F3";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  
+  // Title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("PvP Match", panelX + panelWidth / 2, panelY + 35);
+  
+  // Fake opponent
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#2196F3";
+  ctx.fillText("Opponent: RecycleMaster", panelX + 30, panelY + 80);
+  ctx.fillText(`Score: ${score + 15}`, panelX + 30, panelY + 110);
+  
+  ctx.fillStyle = "#4CAF50";
+  ctx.fillText("You", panelX + 30, panelY + 140);
+  ctx.fillText(`Score: ${score}`, panelX + 30, panelY + 170);
+  
+  ctx.textAlign = "left";
+}
+
+function drawGameOverScreen() {
+  // Dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Game over panel
+  const panelX = canvas.width / 2 - 250;
+  const panelY = canvas.height / 2 - 100;
+  const panelWidth = 500;
+  const panelHeight = 200;
+  
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  ctx.strokeStyle = "#F44336";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  // Message
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(gameOverMessage, panelX + panelWidth / 2, panelY + 70);
+  
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.fillText(`Final Score: ${score} | Level: ${level}`, panelX + panelWidth / 2, panelY + 120);
+  ctx.fillText("Press R to restart", panelX + panelWidth / 2, panelY + 160);
+  
   ctx.textAlign = "left";
 }
 
@@ -994,7 +1343,13 @@ function drawRecyclingSymbol(x, y, size, color) {
 function drawBin(bin) {
   // Create gradient for bin
   const binGradient = ctx.createLinearGradient(bin.x, bin.y, bin.x, bin.y + bin.height);
-  const baseColor = bin.color;
+  let baseColor = bin.color;
+  
+  // Show contamination effect if green bin is contaminated
+  if (greenBinContaminated && bin.category === "green") {
+    baseColor = "#FF6B6B";  // Red tint for contamination
+  }
+  
   binGradient.addColorStop(0, lightenColor(baseColor, 20));
   binGradient.addColorStop(1, darkenColor(baseColor, 10));
   
@@ -1012,9 +1367,9 @@ function drawBin(bin) {
   ctx.closePath();
   ctx.fill();
   
-  // Bin border
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 4;
+  // Bin border (red if contaminated)
+  ctx.strokeStyle = greenBinContaminated && bin.category === "green" ? "#FF0000" : "#FFFFFF";
+  ctx.lineWidth = greenBinContaminated && bin.category === "green" ? 6 : 4;
   ctx.stroke();
   
   // Inner highlight
@@ -1028,20 +1383,10 @@ function drawBin(bin) {
   ctx.closePath();
   ctx.stroke();
   
-  // Draw bin content - organized: numbers at top, symbol in center, examples at bottom
+  // Draw bin content - symbol and numbers/icons together
   const centerX = bin.x + bin.width / 2;
   
   if (phase === "category") {
-    // Show numbers at the top if hints are on
-    if (showHints && bin.info) {
-      const codesMatch = bin.info.codes.match(/#\d+/g);
-      const codesText = codesMatch ? codesMatch.join(", ") : "";
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(codesText, centerX, bin.y + 20);
-    }
-    
     // Draw recycling symbol image in the center
     if (recycleSymbolImage) {
       const symbolSize = 40;
@@ -1052,10 +1397,27 @@ function drawBin(bin) {
       // Fallback to drawn symbol if image not loaded
       drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
     }
+    
+    // Show numbers/icons at the top (always visible, more bin-like)
+    if (bin.info) {
+      const codesMatch = bin.info.codes.match(/#\d+/g);
+      const codesText = codesMatch ? codesMatch.join(", ") : "";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(codesText, centerX, bin.y + 18);
+    }
+    
+    // Show contamination warning if contaminated
+    if (greenBinContaminated && bin.category === "green") {
+      ctx.fillStyle = "#FF0000";
+      ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.fillText("CONTAMINATED!", centerX, bin.y + bin.height - 8);
+    }
   } else {
-    // Code phase: show label at top, symbol in center
+    // Code phase: show label (with number) at top, symbol in center
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.font = "bold 22px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
     ctx.fillText(bin.label, centerX, bin.y + 20);
     
