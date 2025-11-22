@@ -1125,17 +1125,20 @@ function drawFakeLeaderboard() {
     { name: "GreenGamer", score: 723 },
     { name: "RecycleKing", score: 689 },
     { name: "You", score: score },
-    { name: "PlanetSaver", score: 456 }
+    { name: "Taylor Swift", score: -150 },
+    { name: "Elon Musk", score: -200 }
   ].sort((a, b) => b.score - a.score);
   
   ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   let yPos = panelY + 80;
   fakeScores.forEach((entry, index) => {
     const isYou = entry.name === "You";
+    const isNegativeScore = entry.name === "Taylor Swift" || entry.name === "Elon Musk";
     ctx.fillStyle = isYou ? "#4CAF50" : "#2D3748";
     ctx.textAlign = "left";
     ctx.fillText(`${index + 1}. ${entry.name}`, panelX + 30, yPos);
     ctx.textAlign = "right";
+    ctx.fillStyle = isNegativeScore ? "#F44336" : (isYou ? "#4CAF50" : "#2D3748");
     ctx.fillText(`${entry.score}`, panelX + panelWidth - 30, yPos);
     yPos += 35;
   });
