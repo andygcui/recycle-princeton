@@ -122,6 +122,7 @@ let bins = [];
 let showHints = true;  // Show educational hints
 let gameLocation = "Princeton, NJ";  // Store location for display
 let hasCollided = false;  // Prevent multiple collision checks per item
+let isTransitioning = false;  // Flag to prevent updates during phase transitions
 
 // Game progression
 let level = 1;
@@ -142,6 +143,97 @@ const contaminationDuration = 180;  // frames
 // Fake leaderboard and PvP
 let showLeaderboard = false;
 let showPvP = false;
+
+// Tutorial system
+let tutorialActive = false;
+let tutorialStep = 0;
+let tutorialAutoAdvance = false;
+let tutorialAutoAdvanceTimer = 0;
+const tutorialAutoAdvanceDelay = 300; // frames before auto-advancing (5 seconds at 60fps)
+
+// Tutorial steps
+const tutorialSteps = [
+  {
+    title: "Welcome to Recycle Princeton!",
+    text: "Let's learn how to play! This tutorial will teach you everything you need to know about recycling.",
+    highlight: null,
+    action: null
+  },
+  {
+    title: "Your Location",
+    text: "This shows where you're playing. Recycling rules can vary by location!",
+    highlight: { type: "location", x: 25, y: 28, width: 150, height: 20 },
+    action: null
+  },
+  {
+    title: "Your Score",
+    text: "Every time you recycle correctly, you earn points! Try to get as many as you can!",
+    highlight: { type: "score", x: canvas.width - 140, y: 15, width: 120, height: 40 },
+    action: null
+  },
+  {
+    title: "The Recycling Bins",
+    text: "You'll see three colored bins at the bottom:\n• GREEN = Widely recyclable (codes #1 and #2)\n• ORANGE = Special dropoff needed (codes #4 and #5)\n• RED = Not recyclable curbside (codes #3, #6, #7)",
+    highlight: { type: "bins", x: 0, y: canvas.height - 140, width: canvas.width, height: 140 },
+    action: null
+  },
+  {
+    title: "The Falling Item",
+    text: "Items will fall from the top. Your job is to sort them into the correct bin!",
+    highlight: { type: "item", x: canvas.width / 2 - 75, y: 200, width: 150, height: 120 },
+    action: null
+  },
+  {
+    title: "Try It: Water Bottle",
+    text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nUse the arrow keys to move it into the GREEN bin!\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!",
+    highlight: null,
+    action: "setItem",
+    itemName: "Water bottle",
+    interactive: true  // Allow game to run during this step
+  },
+  {
+    title: "Great Job!",
+    text: "You correctly placed the water bottle in the green bin! Now you'll see the second step where you choose the specific plastic code number (#1 or #2).",
+    highlight: null,
+    action: null
+  },
+  {
+    title: "Why Contamination Matters",
+    text: "Putting the wrong item in a bin causes CONTAMINATION! This ruins entire batches of recyclables and wastes everyone's effort. Always check the plastic code number!",
+    highlight: null,
+    action: null
+  },
+  {
+    title: "Green Bin = Curbside Pickup",
+    text: "Items in the GREEN bin can be picked up at your curb! These are codes #1 and #2 - the most common recyclable plastics.",
+    highlight: { type: "bin", binIndex: 0, x: 0, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "Orange Bin = Special Dropoff",
+    text: "Items in the ORANGE bin need special dropoff locations. Don't put them in curbside recycling - they can contaminate the stream!",
+    highlight: { type: "bin", binIndex: 1, x: canvas.width / 3, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "Red Bin = Not Recyclable",
+    text: "Items in the RED bin are NOT accepted in curbside recycling. These should go in regular trash, not recycling bins!",
+    highlight: { type: "bin", binIndex: 2, x: (canvas.width / 3) * 2, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "Controls",
+    text: "Use ARROW KEYS to move items left and right.\nPress ENTER to drop instantly.\nPress SHIFT to speed up.\nPress SPACE to toggle hints.",
+    highlight: null,
+    action: null
+  },
+  {
+    title: "You're Ready!",
+    text: "Now you know how to play! Remember:\n• Check the plastic code number\n• Choose the right color bin first\n• Then choose the right number bin\n• Avoid contamination!\n\nClick 'Start Playing' to begin!",
+    highlight: null,
+    action: null
+  }
+];
 
 // Animated background elements
 let cloudPositions = [
@@ -185,6 +277,14 @@ function initGame() {
   itemY = 200; // Start below the "Recycle this [item]!" text
   setupBins();
   
+  // Check if this is first time playing (tutorial)
+  const hasPlayedBefore = localStorage.getItem('hasPlayedBefore');
+  if (!hasPlayedBefore) {
+    tutorialActive = true;
+    tutorialStep = 0;
+    processTutorialAction(tutorialSteps[0]);
+  }
+  
   // Add click handler for info button on canvas
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -225,9 +325,135 @@ function initGame() {
       showPvP = !showPvP;
       showLeaderboard = false;
     }
+    
+    // Check clicks on tutorial buttons
+    if (tutorialActive && tutorialStep < tutorialSteps.length) {
+      const step = tutorialSteps[tutorialStep];
+      const isInteractive = step.interactive;
+      const panelWidth = isInteractive ? 700 : 600;
+      const panelHeight = isInteractive ? 120 : 300;
+      const panelX = (canvas.width - panelWidth) / 2;
+      const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
+        ? canvas.height - panelHeight - 30 
+        : 50);
+      
+      if (isInteractive) {
+        // Interactive step - only skip button at top right
+        const skipBtnX = panelX + panelWidth - 100;
+        const skipBtnY = panelY + 5;
+        const buttonHeight = 25;
+        const buttonWidth = 90;
+        if (x >= skipBtnX && x <= skipBtnX + buttonWidth && 
+            y >= skipBtnY && y <= skipBtnY + buttonHeight) {
+          skipTutorial();
+          return;
+        }
+      } else {
+        // Normal step - all buttons
+        const buttonHeight = 35;
+        const buttonWidth = 120;
+        const isFirstStep = tutorialStep === 0;
+        const isBinsStep = step.highlight && step.highlight.type === "bins";
+        const panelHeight = isBinsStep ? 350 : 300;
+        
+        // Skip button (top right) - X button on first slide, full button otherwise
+        if (isFirstStep) {
+          const skipBtnSize = 30;
+          const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
+          const skipBtnY = panelY + 15;
+          if (x >= skipBtnX && x <= skipBtnX + skipBtnSize && 
+              y >= skipBtnY && y <= skipBtnY + skipBtnSize) {
+            skipTutorial();
+            return;
+          }
+        } else {
+          const skipBtnX = panelX + panelWidth - buttonWidth - 20;
+          const skipBtnY = panelY + 10;
+          if (x >= skipBtnX && x <= skipBtnX + buttonWidth && 
+              y >= skipBtnY && y <= skipBtnY + buttonHeight) {
+            skipTutorial();
+            return;
+          }
+        }
+        
+        // Previous button (bottom left)
+        const buttonY = panelY + panelHeight - buttonHeight - 15;
+        if (tutorialStep > 0) {
+          const prevBtnX = panelX + 20;
+          if (x >= prevBtnX && x <= prevBtnX + buttonWidth && 
+              y >= buttonY && y <= buttonY + buttonHeight) {
+            previousTutorialStep();
+            return;
+          }
+        }
+        
+        // Next button (bottom right)
+        const nextBtnX = panelX + panelWidth - buttonWidth - 20;
+        if (x >= nextBtnX && x <= nextBtnX + buttonWidth && 
+            y >= buttonY && y <= buttonY + buttonHeight) {
+          nextTutorialStep();
+          return;
+        }
+      }
+    }
   });
   
   gameLoop();
+}
+
+// ============================================================================
+// TUTORIAL SYSTEM
+// ============================================================================
+function processTutorialAction(step) {
+  if (!step || !step.action) return;
+  
+  if (step.action === "setItem") {
+    // Set specific item for tutorial
+    const item = ITEMS.find(i => i.name === step.itemName);
+    if (item) {
+      currentItem = item;
+      updateCurrentItemImage();
+      itemX = canvas.width / 2 - itemWidth / 2;
+      itemY = 200;
+      phase = "category";
+      setupBins();
+    }
+  } else if (step.action === "highlightBin") {
+    // Bin highlighting is handled in rendering
+  }
+}
+
+function nextTutorialStep() {
+  if (tutorialStep < tutorialSteps.length - 1) {
+    tutorialStep++;
+    processTutorialAction(tutorialSteps[tutorialStep]);
+    tutorialAutoAdvanceTimer = 0;
+  } else {
+    endTutorial();
+  }
+}
+
+function previousTutorialStep() {
+  if (tutorialStep > 0) {
+    tutorialStep--;
+    processTutorialAction(tutorialSteps[tutorialStep]);
+    tutorialAutoAdvanceTimer = 0;
+  }
+}
+
+function skipTutorial() {
+  endTutorial();
+}
+
+function endTutorial() {
+  tutorialActive = false;
+  localStorage.setItem('hasPlayedBefore', 'true');
+  // Reset to normal game state
+  pickRandomItem();
+  itemX = canvas.width / 2 - itemWidth / 2;
+  itemY = 200;
+  phase = "category";
+  setupBins();
 }
 
 // Load recycling symbol image
@@ -566,6 +792,27 @@ function dropIntoBinBelow() {
 // INPUT HANDLING
 // ============================================================================
 window.addEventListener("keydown", (e) => {
+  // Handle tutorial navigation
+  if (tutorialActive) {
+    if (e.key === "ArrowRight" || e.key === "Enter") {
+      e.preventDefault();
+      nextTutorialStep();
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      previousTutorialStep();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      skipTutorial();
+      return;
+    }
+    // Don't process other keys during tutorial
+    return;
+  }
+  
   if (e.key === "ArrowLeft") keys.left = true;
   if (e.key === "ArrowRight") keys.right = true;
   if (e.key === "ArrowDown") keys.down = true;
@@ -599,6 +846,16 @@ window.addEventListener("keydown", (e) => {
     // Toggle PvP
     showPvP = !showPvP;
     showLeaderboard = false;  // Close leaderboard if open
+  }
+  if (e.key === "t" || e.key === "T") {
+    // Restart tutorial (for testing/debugging)
+    localStorage.removeItem('hasPlayedBefore');
+    tutorialActive = true;
+    tutorialStep = 0;
+    processTutorialAction(tutorialSteps[0]);
+    resetItem();
+    phase = "category";
+    setupBins();
   }
 });
 
@@ -648,41 +905,88 @@ function update() {
   // Update level-based speed
   itemSpeedY = baseSpeedY * (1 + (level - 1) * 0.3);  // 30% faster per level
   
+  // Update tutorial auto-advance timer
+  if (tutorialActive && tutorialAutoAdvance) {
+    tutorialAutoAdvanceTimer++;
+    if (tutorialAutoAdvanceTimer >= tutorialAutoAdvanceDelay) {
+      nextTutorialStep();
+    }
+  }
+  
   // Don't update game if game over
   if (gameOver) {
     return;
   }
   
-  // Handle horizontal movement
-  const moveSpeed = 2;
-  if (keys.left) {
-    itemSpeedX = -moveSpeed;
-  } else if (keys.right) {
-    itemSpeedX = moveSpeed;
-  } else {
-    itemSpeedX = 0;
+  // Don't update game logic during tutorial (unless interactive step)
+  if (tutorialActive) {
+    const currentStep = tutorialSteps[tutorialStep];
+    const isInteractive = currentStep && currentStep.interactive;
+    
+    // Still animate clouds during tutorial
+    animationFrame++;
+    cloudPositions.forEach(cloud => {
+      cloud.x += 0.1;
+      if (cloud.x > canvas.width + cloud.size) {
+        cloud.x = -cloud.size;
+      }
+    });
+    
+    // Allow game to run during interactive tutorial steps
+    if (!isInteractive) {
+      return;
+    }
+    // Continue with game logic if interactive
   }
   
-  // Update item position
-  itemX += itemSpeedX;
-  
-  // Keep item within canvas bounds
-  if (itemX < 0) itemX = 0;
-  if (itemX + itemWidth > canvas.width) itemX = canvas.width - itemWidth;
-  
-  // Handle fall speed
-  let currentSpeedY = itemSpeedY;
-  if (keys.shift) {
-    // Shift = speed up (3x faster while held)
-    currentSpeedY *= 3;
-  } else if (keys.down) {
-    // Down arrow = slightly faster
-    currentSpeedY *= 1.5;
+  // Don't update item position during transitions
+  if (!isTransitioning) {
+    // Handle horizontal movement
+    const moveSpeed = 2;
+    if (keys.left) {
+      itemSpeedX = -moveSpeed;
+    } else if (keys.right) {
+      itemSpeedX = moveSpeed;
+    } else {
+      itemSpeedX = 0;
+    }
+    
+    // Update item position
+    itemX += itemSpeedX;
+    
+    // Keep item within canvas bounds
+    if (itemX < 0) itemX = 0;
+    if (itemX + itemWidth > canvas.width) itemX = canvas.width - itemWidth;
+    
+    // Handle fall speed
+    let currentSpeedY = itemSpeedY;
+    if (keys.shift) {
+      // Shift = speed up (3x faster while held)
+      currentSpeedY *= 3;
+    } else if (keys.down) {
+      // Down arrow = slightly faster
+      currentSpeedY *= 1.5;
+    }
+    
+    // Update vertical position
+    // Continue falling even after collision detected, so item goes into bin visually
+    itemY += currentSpeedY;
+    
+    // Check collision with bins (only once per item)
+    // Item must go 60 pixels deep into the bin before collision is detected
+    if (!hasCollided && bins.length > 0 && itemY + itemHeight >= bins[0].y + 60) {
+      hasCollided = true;
+      checkBinCollision();
+    }
+    
+    // Reset if item falls off screen (adds to trash pile)
+    if (itemY > canvas.height) {
+      if (!tutorialActive) {
+        addToTrashPile();
+      }
+      resetItem();
+    }
   }
-  
-  // Update vertical position
-  // Continue falling even after collision detected, so item goes into bin visually
-  itemY += currentSpeedY;
   
   // Animate clouds (move slowly to the right)
   animationFrame++;
@@ -693,19 +997,6 @@ function update() {
       cloud.x = -cloud.size;
     }
   });
-  
-  // Check collision with bins (only once per item)
-  // Item must go 60 pixels deep into the bin before collision is detected
-  if (!hasCollided && bins.length > 0 && itemY + itemHeight >= bins[0].y + 60) {
-    hasCollided = true;
-    checkBinCollision();
-  }
-  
-  // Reset if item falls off screen (adds to trash pile)
-  if (itemY > canvas.height) {
-    addToTrashPile();
-    resetItem();
-  }
 }
 
 function checkBinCollision() {
@@ -724,9 +1015,27 @@ function checkBinCollision() {
           flashColor = "green";
           flashTimer = flashDuration;
           
+          // Check if this is tutorial interactive step
+          if (tutorialActive && tutorialStep < tutorialSteps.length) {
+            const currentStep = tutorialSteps[tutorialStep];
+            if (currentStep.interactive && currentItem.name === "Water bottle" && bin.category === "green") {
+              // Tutorial success! Advance after showing success message
+              setTimeout(() => {
+                nextTutorialStep();
+                resetItem();
+                phase = "category";
+                setupBins();
+              }, 1500);
+              return;
+            }
+          }
+          
           // All items proceed to Phase 2 (code sorting)
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
+          
+          // Set transition flag to prevent updates
+          isTransitioning = true;
           
           // Let item continue falling into bin, then transition after it's fully in
           setTimeout(() => {
@@ -736,8 +1045,9 @@ function checkBinCollision() {
             itemX = canvas.width / 2 - itemWidth / 2;
             itemY = 200; // Start below the "Recycle this [item]!" text
             hasCollided = false;  // Reset collision flag for phase transition
+            isTransitioning = false;  // End transition
             showEducationalContent();
-          }, 3000); // Increased delay to see item go into bin
+          }, 2000); // Reduced delay for smoother transition
         } else {
           // Wrong bin - teach them!
           const correctInfo = CATEGORY_INFO[currentItem.category];
@@ -749,18 +1059,21 @@ function checkBinCollision() {
           flashColor = "red";
           flashTimer = flashDuration;
           
-          // If recyclable plastic dropped into red/orange bin, add to trash pile
-          if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
-            addToTrashPile();
-          }
-          
-          // If non-recyclable plastic dropped into green bin, contaminate it
-          if (currentItem.category !== "green" && bin.category === "green") {
-            greenBinContaminated = true;
-            contaminationTimer = contaminationDuration;
-            addToTrashPile();
-          } else {
-            addToTrashPile();  // Any wrong bin adds to trash pile
+          // Don't add to trash pile during tutorial
+          if (!tutorialActive) {
+            // If recyclable plastic dropped into red/orange bin, add to trash pile
+            if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
+              addToTrashPile();
+            }
+            
+            // If non-recyclable plastic dropped into green bin, contaminate it
+            if (currentItem.category !== "green" && bin.category === "green") {
+              greenBinContaminated = true;
+              contaminationTimer = contaminationDuration;
+              addToTrashPile();
+            } else {
+              addToTrashPile();  // Any wrong bin adds to trash pile
+            }
           }
           
           messageTimer = messageDuration;
@@ -851,6 +1164,7 @@ function restartGame() {
   codePhaseCategory = null;
   itemSpeedY = baseSpeedY;
   hasCollided = false;
+  isTransitioning = false;
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
   itemY = 200;
@@ -890,6 +1204,190 @@ function roundedRect(x, y, width, height, radius) {
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
+}
+
+function drawTutorial() {
+  if (!tutorialActive || tutorialStep >= tutorialSteps.length) return;
+  
+  const step = tutorialSteps[tutorialStep];
+  
+  // Calculate highlight area first
+  let highlightX, highlightY, highlightWidth, highlightHeight, highlightRadius;
+  
+  if (step.highlight) {
+    if (step.highlight.type === "bin" && bins.length > step.highlight.binIndex) {
+      const bin = bins[step.highlight.binIndex];
+      highlightX = bin.x - 5;
+      highlightY = bin.y - 5;
+      highlightWidth = bin.width + 10;
+      highlightHeight = bin.height + 10;
+      highlightRadius = 10;
+    } else if (step.highlight.type === "item") {
+      // Use actual item position if available
+      highlightX = (currentItem && itemX !== undefined) ? itemX - 5 : step.highlight.x - 5;
+      highlightY = (currentItem && itemY !== undefined) ? itemY - 5 : step.highlight.y - 5;
+      highlightWidth = itemWidth + 10;
+      highlightHeight = itemHeight + 10;
+      highlightRadius = 10;
+    } else if (step.highlight.type === "location") {
+      highlightX = step.highlight.x - 5;
+      highlightY = step.highlight.y - 5;
+      highlightWidth = step.highlight.width + 10;
+      highlightHeight = step.highlight.height + 10;
+      highlightRadius = 5;
+    } else if (step.highlight.type === "score") {
+      highlightX = step.highlight.x - 5;
+      highlightY = step.highlight.y - 5;
+      highlightWidth = step.highlight.width + 10;
+      highlightHeight = step.highlight.height + 10;
+      highlightRadius = 10;
+    } else if (step.highlight.type === "bins") {
+      highlightX = step.highlight.x - 5;
+      highlightY = step.highlight.y - 5;
+      highlightWidth = step.highlight.width + 10;
+      highlightHeight = step.highlight.height + 10;
+      highlightRadius = 10;
+    }
+  }
+  
+  // Draw dark overlay in parts (around the highlight area)
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  
+  if (step.highlight && highlightX !== undefined) {
+    // Draw overlay in 4 rectangles around the highlight
+    // Top
+    ctx.fillRect(0, 0, canvas.width, highlightY);
+    // Bottom
+    ctx.fillRect(0, highlightY + highlightHeight, canvas.width, canvas.height - (highlightY + highlightHeight));
+    // Left
+    ctx.fillRect(0, highlightY, highlightX, highlightHeight);
+    // Right
+    ctx.fillRect(highlightX + highlightWidth, highlightY, canvas.width - (highlightX + highlightWidth), highlightHeight);
+    
+    // Draw highlight border
+    ctx.strokeStyle = "#FFD700";
+    ctx.lineWidth = 4;
+    roundedRect(highlightX, highlightY, highlightWidth, highlightHeight, highlightRadius);
+    ctx.stroke();
+  } else {
+    // No highlight - draw full overlay
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  
+  // Draw tutorial panel
+  // Make panel smaller and at top for interactive steps
+  const isInteractive = step.interactive;
+  const isFirstStep = tutorialStep === 0;
+  const isBinsStep = step.highlight && step.highlight.type === "bins";
+  const panelWidth = isInteractive ? 700 : 600;
+  const panelHeight = isInteractive ? 120 : (isBinsStep ? 350 : 300);
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
+    ? canvas.height - panelHeight - 30 
+    : 50);
+  
+  // Panel background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  // Panel border
+  ctx.strokeStyle = "#4CAF50";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  // Title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = isInteractive ? "bold 22px 'Comic Sans MS', 'Trebuchet MS', Arial" : "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(step.title, panelX + panelWidth / 2, panelY + (isInteractive ? 25 : 40));
+  
+  // Text (with line breaks)
+  ctx.fillStyle = "#4A5568";
+  ctx.font = isInteractive ? "16px 'Comic Sans MS', 'Trebuchet MS', Arial" : "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  const lines = step.text.split('\n');
+  let textY = panelY + (isInteractive ? 50 : 80);
+  const lineHeight = isInteractive ? 20 : 26;
+  lines.forEach(line => {
+    const wrappedLines = wrapText(ctx, line, panelWidth - 60, isInteractive ? 16 : 18);
+    wrappedLines.forEach(wrappedLine => {
+      ctx.fillText(wrappedLine, panelX + 30, textY);
+      textY += lineHeight;
+    });
+  });
+  
+  // Buttons (hide during interactive steps except skip)
+  if (!isInteractive) {
+    const buttonHeight = 35;
+    const buttonWidth = 120;
+    
+    // Skip button (top right) - smaller X button on first slide
+    if (isFirstStep) {
+      // Small X button for first slide
+      const skipBtnSize = 30;
+      const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
+      const skipBtnY = panelY + 15;
+      ctx.fillStyle = "#F44336";
+      roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("×", skipBtnX + skipBtnSize / 2, skipBtnY + skipBtnSize / 2 + 6);
+    } else {
+      // Full skip button for other slides
+      const skipBtnX = panelX + panelWidth - buttonWidth - 20;
+      const skipBtnY = panelY + 10;
+      ctx.fillStyle = "#F44336";
+      roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Skip Tutorial", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 5);
+    }
+    
+    // Previous button (bottom left)
+    const buttonY = panelY + panelHeight - buttonHeight - 15;
+    if (tutorialStep > 0) {
+      const prevBtnX = panelX + 20;
+      ctx.fillStyle = "#FF9800";
+      roundedRect(prevBtnX, buttonY, buttonWidth, buttonHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText("Previous", prevBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+    }
+    
+    // Next button (bottom right)
+    const nextBtnX = panelX + panelWidth - buttonWidth - 20;
+    ctx.fillStyle = tutorialStep === tutorialSteps.length - 1 ? "#4CAF50" : "#2196F3";
+    roundedRect(nextBtnX, buttonY, buttonWidth, buttonHeight, 8);
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText(tutorialStep === tutorialSteps.length - 1 ? "Start Playing" : "Next", nextBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+    
+    // Step indicator (at the very bottom)
+    ctx.fillStyle = "#999";
+    ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`Step ${tutorialStep + 1} of ${tutorialSteps.length}`, panelX + panelWidth / 2, panelY + panelHeight - 5);
+  } else {
+    // Interactive step - only show skip button at top right
+    const skipBtnX = panelX + panelWidth - 100;
+    const skipBtnY = panelY + 5;
+    const buttonHeight = 25;
+    const buttonWidth = 90;
+    ctx.fillStyle = "#F44336";
+    roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 6);
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Skip", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 4);
+  }
+  
+  ctx.textAlign = "left";
 }
 
 function render() {
@@ -1002,7 +1500,8 @@ function render() {
   
   // Draw item FIRST (so it appears behind bins when overlapping)
   // Draw item even when it's going into the bin (up to 60 pixels deep)
-  if (currentItem) {
+  // Don't draw item during transitions
+  if (currentItem && !isTransitioning) {
     let shouldDrawItem = true;
     if (bins.length > 0) {
       const binTop = bins[0].y;
@@ -1055,12 +1554,19 @@ function render() {
     drawGameOverScreen();
   }
   
-  // Draw friendly instructions
-  ctx.fillStyle = "#666666";
-  ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "right";
-  ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
-  ctx.textAlign = "left";
+  // Draw friendly instructions (only if tutorial not active)
+  if (!tutorialActive) {
+    ctx.fillStyle = "#666666";
+    ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "right";
+    ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
+    ctx.textAlign = "left";
+  }
+  
+  // Draw tutorial overlay (on top of everything)
+  if (tutorialActive) {
+    drawTutorial();
+  }
 }
 
 function drawTrashPile() {
