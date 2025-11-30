@@ -139,6 +139,10 @@ const maxTrashPileHeight = 100;
 let greenBinContaminated = false;
 let contaminationTimer = 0;
 const contaminationDuration = 180;  // frames
+let contaminationCount = 0;  // Track number of contaminations
+let contaminationAlertTimer = 0;  // Timer for showing contamination alert
+const contaminationAlertDuration = 180;  // frames to show alert
+let contaminationAlertMessage = "";  // Contamination alert message
 
 // Fake leaderboard and PvP
 let showLeaderboard = false;
@@ -150,6 +154,7 @@ let tutorialStep = 0;
 let tutorialAutoAdvance = false;
 let tutorialAutoAdvanceTimer = 0;
 const tutorialAutoAdvanceDelay = 300; // frames before auto-advancing (5 seconds at 60fps)
+let tutorialSubStep = 0; // Track substeps within interactive tutorial steps (0 = explanation, 1 = ready, 2 = playing)
 
 // Tutorial steps
 const tutorialSteps = [
@@ -173,8 +178,8 @@ const tutorialSteps = [
   },
   {
     title: "The Recycling Bins",
-    text: "You'll see three colored bins at the bottom:\n• GREEN = Widely recyclable (codes #1 and #2)\n• ORANGE = Special dropoff needed (codes #4 and #5)\n• RED = Not recyclable curbside (codes #3, #6, #7)",
-    highlight: { type: "bins", x: 0, y: canvas.height - 140, width: canvas.width, height: 140 },
+    text: "You'll see three colored bins at the bottom:\n• GREEN = Widely recyclable\n• ORANGE = Special dropoff needed\n• RED = Not recyclable curbside",
+    highlight: { type: "bins", x: 0, y: canvas.height - 150, width: canvas.width, height: 150 },
     action: null
   },
   {
@@ -185,17 +190,33 @@ const tutorialSteps = [
   },
   {
     title: "Try It: Water Bottle",
-    text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nUse the arrow keys to move it into the GREEN bin!\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!",
+    text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!",
     highlight: null,
     action: "setItem",
     itemName: "Water bottle",
-    interactive: true  // Allow game to run during this step
+    interactive: true,  // Allow game to run during this step
+    substeps: [
+      { title: "Try It: Water Bottle", text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!" },
+      { title: "Ready?", text: "Use the arrow keys to move the water bottle into the GREEN bin!\n\nTry it now!" }
+    ]
   },
   {
     title: "Great Job!",
     text: "You correctly placed the water bottle in the green bin! Now you'll see the second step where you choose the specific plastic code number (#1 or #2).",
     highlight: null,
     action: null
+  },
+  {
+    title: "Try It: Choose the Code",
+    text: "Now choose the specific plastic code! The water bottle is PET, which is code #1.\n\nPut it in the #1 bin!",
+    highlight: null,
+    action: "setItemCodePhase",
+    itemName: "Water bottle",
+    interactive: true,
+    substeps: [
+      { title: "Try It: Choose the Code", text: "Now choose the specific plastic code! The water bottle is PET, which is code #1.\n\nPut it in the #1 bin!" },
+      { title: "Ready?", text: "Use the arrow keys to move the water bottle into the #1 bin!\n\nTry it now!" }
+    ]
   },
   {
     title: "Why Contamination Matters",
@@ -330,31 +351,68 @@ function initGame() {
     if (tutorialActive && tutorialStep < tutorialSteps.length) {
       const step = tutorialSteps[tutorialStep];
       const isInteractive = step.interactive;
+      const currentSubStep = step.substeps ? step.substeps[tutorialSubStep] : null;
+      const isReadyStep = isInteractive && currentSubStep && tutorialSubStep === 1;
+      const isExplanationStep = isInteractive && tutorialSubStep === 0;
       const panelWidth = isInteractive ? 700 : 600;
-      const panelHeight = isInteractive ? 120 : 300;
+      const panelHeight = isInteractive ? ((isReadyStep || isExplanationStep) ? 300 : 120) : 300;
       const panelX = (canvas.width - panelWidth) / 2;
       const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
         ? canvas.height - panelHeight - 30 
         : 50);
       
       if (isInteractive) {
-        // Interactive step - only skip button at top right
-        const skipBtnX = panelX + panelWidth - 100;
-        const skipBtnY = panelY + 5;
-        const buttonHeight = 25;
-        const buttonWidth = 90;
+        const buttonHeight = 35;
+        const buttonWidth = 120;
+        
+        // Skip button at top right
+        const skipBtnX = panelX + panelWidth - buttonWidth - 20;
+        const skipBtnY = panelY + 10;
         if (x >= skipBtnX && x <= skipBtnX + buttonWidth && 
             y >= skipBtnY && y <= skipBtnY + buttonHeight) {
           skipTutorial();
           return;
+        }
+        
+        // "Try It Now" and "Previous" buttons on substep 0 (explanation)
+        if (currentSubStep && tutorialSubStep === 0 && step.substeps) {
+          const buttonY = panelY + panelHeight - buttonHeight - 15;
+          
+          // Previous button (bottom left)
+          if (tutorialStep > 0) {
+            const prevBtnX = panelX + 20;
+            if (x >= prevBtnX && x <= prevBtnX + buttonWidth && 
+                y >= buttonY && y <= buttonY + buttonHeight) {
+              previousTutorialStep();
+              return;
+            }
+          }
+          
+          // Try It Now button (bottom right) - goes directly to gameplay (substep 2)
+          const tryBtnX = panelX + panelWidth - buttonWidth - 20;
+          if (x >= tryBtnX && x <= tryBtnX + buttonWidth && 
+              y >= buttonY && y <= buttonY + buttonHeight) {
+            tutorialSubStep = 2; // Skip to gameplay mode directly
+            return;
+          }
+        }
+        
+        // "Try Now!" button on substep 1 (Ready? step) to start playing
+        if (currentSubStep && tutorialSubStep === 1 && step.substeps && tutorialSubStep < step.substeps.length) {
+          const nextBtnX = panelX + panelWidth - buttonWidth - 20;
+          const nextBtnY = panelY + panelHeight - buttonHeight - 15;
+          if (x >= nextBtnX && x <= nextBtnX + buttonWidth && 
+              y >= nextBtnY && y <= nextBtnY + buttonHeight) {
+            nextTutorialSubStep(); // Advance to playing mode (substep 2)
+            return;
+          }
         }
       } else {
         // Normal step - all buttons
         const buttonHeight = 35;
         const buttonWidth = 120;
         const isFirstStep = tutorialStep === 0;
-        const isBinsStep = step.highlight && step.highlight.type === "bins";
-        const panelHeight = isBinsStep ? 350 : 300;
+        const panelHeight = 300;
         
         // Skip button (top right) - X button on first slide, full button otherwise
         if (isFirstStep) {
@@ -405,7 +463,10 @@ function initGame() {
 // TUTORIAL SYSTEM
 // ============================================================================
 function processTutorialAction(step) {
-  if (!step || !step.action) return;
+  if (!step) return;
+  
+  // Reset substep when starting a new step
+  tutorialSubStep = 0;
   
   if (step.action === "setItem") {
     // Set specific item for tutorial
@@ -418,6 +479,18 @@ function processTutorialAction(step) {
       phase = "category";
       setupBins();
     }
+  } else if (step.action === "setItemCodePhase") {
+    // Set specific item and transition to code phase for tutorial
+    const item = ITEMS.find(i => i.name === step.itemName);
+    if (item) {
+      currentItem = item;
+      updateCurrentItemImage();
+      itemX = canvas.width / 2 - itemWidth / 2;
+      itemY = 200;
+      phase = "code";
+      codePhaseCategory = item.category; // Set to green since water bottle is green
+      setupBins();
+    }
   } else if (step.action === "highlightBin") {
     // Bin highlighting is handled in rendering
   }
@@ -426,10 +499,18 @@ function processTutorialAction(step) {
 function nextTutorialStep() {
   if (tutorialStep < tutorialSteps.length - 1) {
     tutorialStep++;
+    tutorialSubStep = 0; // Reset substep when moving to new step
     processTutorialAction(tutorialSteps[tutorialStep]);
     tutorialAutoAdvanceTimer = 0;
   } else {
     endTutorial();
+  }
+}
+
+function nextTutorialSubStep() {
+  const step = tutorialSteps[tutorialStep];
+  if (step.interactive && step.substeps && tutorialSubStep < step.substeps.length - 1) {
+    tutorialSubStep++;
   }
 }
 
@@ -792,25 +873,48 @@ function dropIntoBinBelow() {
 // INPUT HANDLING
 // ============================================================================
 window.addEventListener("keydown", (e) => {
-  // Handle tutorial navigation
+  // Handle tutorial navigation (but allow gameplay controls during interactive demo)
   if (tutorialActive) {
-    if (e.key === "ArrowRight" || e.key === "Enter") {
-      e.preventDefault();
-      nextTutorialStep();
+    const currentStep = tutorialSteps[tutorialStep];
+    const isPlayingMode = currentStep && currentStep.interactive && tutorialSubStep >= 2;
+    
+    // During gameplay mode, allow normal game controls (don't intercept)
+    if (isPlayingMode) {
+      // Only handle Escape to skip, let everything else pass through to game
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skipTutorial();
+        return;
+      }
+      // Let all other keys (including arrows) pass through to normal game handling
+      // Don't return here, continue to normal game key handling below
+    } else {
+      // During tutorial panels, handle navigation
+      // Special case: on explanation slide (substep 0), right arrow goes to gameplay
+      if (currentStep && currentStep.interactive && tutorialSubStep === 0 && e.key === "ArrowRight") {
+        e.preventDefault();
+        tutorialSubStep = 2; // Go directly to gameplay
+        return;
+      }
+      
+      if (e.key === "ArrowRight" || e.key === "Enter") {
+        e.preventDefault();
+        nextTutorialStep();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        previousTutorialStep();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skipTutorial();
+        return;
+      }
+      // Don't process other keys during tutorial panels
       return;
     }
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      previousTutorialStep();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      skipTutorial();
-      return;
-    }
-    // Don't process other keys during tutorial
-    return;
   }
   
   if (e.key === "ArrowLeft") keys.left = true;
@@ -902,6 +1006,14 @@ function update() {
     }
   }
   
+  // Update contamination alert timer
+  if (contaminationAlertTimer > 0) {
+    contaminationAlertTimer--;
+    if (contaminationAlertTimer === 0) {
+      contaminationAlertMessage = "";
+    }
+  }
+  
   // Update level-based speed
   itemSpeedY = baseSpeedY * (1 + (level - 1) * 0.3);  // 30% faster per level
   
@@ -918,10 +1030,11 @@ function update() {
     return;
   }
   
-  // Don't update game logic during tutorial (unless interactive step)
+  // Don't update game logic during tutorial (unless interactive step in playing mode)
   if (tutorialActive) {
     const currentStep = tutorialSteps[tutorialStep];
     const isInteractive = currentStep && currentStep.interactive;
+    const isPlayingMode = isInteractive && tutorialSubStep >= 2;
     
     // Still animate clouds during tutorial
     animationFrame++;
@@ -932,11 +1045,11 @@ function update() {
       }
     });
     
-    // Allow game to run during interactive tutorial steps
-    if (!isInteractive) {
+    // Allow game to run only during interactive tutorial steps in playing mode (substep >= 2)
+    if (!isPlayingMode) {
       return;
     }
-    // Continue with game logic if interactive
+    // Continue with game logic if in playing mode
   }
   
   // Don't update item position during transitions
@@ -1018,14 +1131,14 @@ function checkBinCollision() {
           // Check if this is tutorial interactive step
           if (tutorialActive && tutorialStep < tutorialSteps.length) {
             const currentStep = tutorialSteps[tutorialStep];
-            if (currentStep.interactive && currentItem.name === "Water bottle" && bin.category === "green") {
-              // Tutorial success! Advance after showing success message
+            if (currentStep.interactive && currentItem.name === "Water bottle" && bin.category === "green" && tutorialSubStep >= 2) {
+              // Tutorial success! Advance to next tutorial step after showing success message
               setTimeout(() => {
                 nextTutorialStep();
                 resetItem();
                 phase = "category";
                 setupBins();
-              }, 1500);
+              }, 2000);
               return;
             }
           }
@@ -1061,18 +1174,28 @@ function checkBinCollision() {
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
-            // If recyclable plastic dropped into red/orange bin, add to trash pile
-            if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
-              addToTrashPile();
-            }
-            
-            // If non-recyclable plastic dropped into green bin, contaminate it
+            // Check for contamination: non-green items entering green bin
             if (currentItem.category !== "green" && bin.category === "green") {
+              contaminationCount++;
               greenBinContaminated = true;
               contaminationTimer = contaminationDuration;
+              contaminationAlertMessage = "CONTAMINATION ALERT!";
+              contaminationAlertTimer = contaminationAlertDuration;
+              
+              // End game after 3 contaminations
+              if (contaminationCount >= 3) {
+                setTimeout(() => {
+                  endGame(false);
+                  gameOverMessage = "Game Over!\nThe green bin is too contaminated.";
+                }, 1000);
+              }
+              // Don't add to trash pile for contamination
+            }
+            // If recyclable plastic dropped into red/orange bin, add to trash pile
+            else if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
               addToTrashPile();
             } else {
-              addToTrashPile();  // Any wrong bin adds to trash pile
+              addToTrashPile();  // Any other wrong bin adds to trash pile
             }
           }
           
@@ -1092,6 +1215,22 @@ function checkBinCollision() {
           // Flash green for correct answer
           flashColor = "green";
           flashTimer = flashDuration;
+          
+          // Check if this is tutorial interactive step (code phase demo)
+          if (tutorialActive && tutorialStep < tutorialSteps.length) {
+            const currentStep = tutorialSteps[tutorialStep];
+            if (currentStep.interactive && currentStep.action === "setItemCodePhase" && currentItem.name === "Water bottle" && bin.code === 1 && tutorialSubStep >= 2) {
+              // Tutorial success! Advance to next tutorial step after showing success message
+              setTimeout(() => {
+                nextTutorialStep();
+                resetItem();
+                phase = "category";
+                codePhaseCategory = null;
+                setupBins();
+              }, 2000);
+              return;
+            }
+          }
           
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
@@ -1113,8 +1252,11 @@ function checkBinCollision() {
           flashColor = "red";
           flashTimer = flashDuration;
           
-          // Wrong code adds to trash pile
-          addToTrashPile();
+          // Don't add to trash pile during tutorial
+          if (!tutorialActive) {
+            // Wrong code adds to trash pile
+            addToTrashPile();
+          }
           
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
@@ -1146,7 +1288,7 @@ function endGame(won) {
   if (won) {
     gameOverMessage = "Congratulations! You're a recycling champion!";
   } else {
-    gameOverMessage = "Game Over! The trash pile got too high. Try again!";
+    gameOverMessage =  "Game Over!\nThe tash pile got too high.";
   }
 }
 
@@ -1160,6 +1302,9 @@ function restartGame() {
   trashPileHeight = 0;
   greenBinContaminated = false;
   contaminationTimer = 0;
+  contaminationCount = 0;
+  contaminationAlertTimer = 0;
+  contaminationAlertMessage = "";
   phase = "category";
   codePhaseCategory = null;
   itemSpeedY = baseSpeedY;
@@ -1185,6 +1330,11 @@ function checkLevelProgression() {
     correctItemsThisLevel = 0;  // Reset counter for next level
     message = `Level ${level}! Items fall faster now!`;
     messageTimer = messageDuration;
+    
+    // Automatically turn off hints after level 4
+    if (level >= 4 && showHints) {
+      showHints = false;
+    }
   }
 }
 
@@ -1210,6 +1360,22 @@ function drawTutorial() {
   if (!tutorialActive || tutorialStep >= tutorialSteps.length) return;
   
   const step = tutorialSteps[tutorialStep];
+  
+  // Handle substeps for interactive steps
+  let currentSubStep = null;
+  let showPanel = true;
+  if (step.interactive && step.substeps) {
+    currentSubStep = step.substeps[tutorialSubStep];
+    // Hide panel when playing (substep 2)
+    if (tutorialSubStep >= 2) {
+      showPanel = false;
+    }
+  }
+  
+  // Don't draw panel if we're in playing mode
+  if (!showPanel) {
+    return;
+  }
   
   // Calculate highlight area first
   let highlightX, highlightY, highlightWidth, highlightHeight, highlightRadius;
@@ -1242,11 +1408,23 @@ function drawTutorial() {
       highlightHeight = step.highlight.height + 10;
       highlightRadius = 10;
     } else if (step.highlight.type === "bins") {
-      highlightX = step.highlight.x - 5;
-      highlightY = step.highlight.y - 5;
-      highlightWidth = step.highlight.width + 10;
-      highlightHeight = step.highlight.height + 10;
-      highlightRadius = 10;
+      // Calculate highlight based on actual bin positions
+      if (bins.length > 0) {
+        const firstBin = bins[0];
+        const lastBin = bins[bins.length - 1];
+        highlightX = -5;
+        highlightY = firstBin.y - 15; // Start a bit above the bins
+        highlightWidth = canvas.width + 10;
+        highlightHeight = (canvas.height - highlightY) + 5; // Extend to bottom of canvas
+        highlightRadius = 10;
+      } else {
+        // Fallback to step coordinates
+        highlightX = step.highlight.x - 5;
+        highlightY = step.highlight.y - 5;
+        highlightWidth = step.highlight.width + 10;
+        highlightHeight = step.highlight.height + 10;
+        highlightRadius = 10;
+      }
     }
   }
   
@@ -1278,9 +1456,10 @@ function drawTutorial() {
   // Make panel smaller and at top for interactive steps
   const isInteractive = step.interactive;
   const isFirstStep = tutorialStep === 0;
-  const isBinsStep = step.highlight && step.highlight.type === "bins";
+  const isReadyStep = isInteractive && currentSubStep && tutorialSubStep === 1;
+  const isExplanationStep = isInteractive && tutorialSubStep === 0;
   const panelWidth = isInteractive ? 700 : 600;
-  const panelHeight = isInteractive ? 120 : (isBinsStep ? 350 : 300);
+  const panelHeight = isInteractive ? ((isReadyStep || isExplanationStep) ? 300 : 120) : 300;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
     ? canvas.height - panelHeight - 30 
@@ -1296,17 +1475,19 @@ function drawTutorial() {
   ctx.lineWidth = 4;
   ctx.stroke();
   
-  // Title
+  // Title - use substep title if available
+  const displayTitle = currentSubStep ? currentSubStep.title : step.title;
   ctx.fillStyle = "#2D3748";
   ctx.font = isInteractive ? "bold 22px 'Comic Sans MS', 'Trebuchet MS', Arial" : "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText(step.title, panelX + panelWidth / 2, panelY + (isInteractive ? 25 : 40));
+  ctx.fillText(displayTitle, panelX + panelWidth / 2, panelY + (isInteractive ? 25 : 40));
   
-  // Text (with line breaks)
+  // Text (with line breaks) - use substep text if available
+  const displayText = currentSubStep ? currentSubStep.text : step.text;
   ctx.fillStyle = "#4A5568";
   ctx.font = isInteractive ? "16px 'Comic Sans MS', 'Trebuchet MS', Arial" : "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
-  const lines = step.text.split('\n');
+  const lines = displayText.split('\n');
   let textY = panelY + (isInteractive ? 50 : 80);
   const lineHeight = isInteractive ? 20 : 26;
   lines.forEach(line => {
@@ -1373,18 +1554,54 @@ function drawTutorial() {
     ctx.textAlign = "center";
     ctx.fillText(`Step ${tutorialStep + 1} of ${tutorialSteps.length}`, panelX + panelWidth / 2, panelY + panelHeight - 5);
   } else {
-    // Interactive step - only show skip button at top right
-    const skipBtnX = panelX + panelWidth - 100;
-    const skipBtnY = panelY + 5;
-    const buttonHeight = 25;
-    const buttonWidth = 90;
+    // Interactive step - show skip button and optionally Next button
+    const buttonHeight = 35;
+    const buttonWidth = 120;
+    
+    // Skip button at top right
+    const skipBtnX = panelX + panelWidth - buttonWidth - 20;
+    const skipBtnY = panelY + 10;
     ctx.fillStyle = "#F44336";
-    roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 6);
+    roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 8);
     ctx.fill();
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Skip", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 4);
+    ctx.fillText("Skip Tutorial", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 5);
+    
+    // Show "Try It Now" and "Previous" buttons on substep 0 (explanation)
+    if (currentSubStep && tutorialSubStep === 0 && step.substeps) {
+      const buttonY = panelY + panelHeight - buttonHeight - 15;
+      
+      // Previous button (bottom left) - only show if not first tutorial step
+      if (tutorialStep > 0) {
+        const prevBtnX = panelX + 20;
+        ctx.fillStyle = "#FF9800";
+        roundedRect(prevBtnX, buttonY, buttonWidth, buttonHeight, 8);
+        ctx.fill();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText("Previous", prevBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+      }
+      
+      // Try It Now button (bottom right) - goes directly to gameplay
+      const tryBtnX = panelX + panelWidth - buttonWidth - 20;
+      ctx.fillStyle = "#4CAF50";
+      roundedRect(tryBtnX, buttonY, buttonWidth, buttonHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText("Try It Now", tryBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+    }
+    
+    // Show "Try Now!" button on substep 1 (Ready? step) to start playing
+    if (currentSubStep && tutorialSubStep === 1 && step.substeps && tutorialSubStep < step.substeps.length) {
+      const nextBtnX = panelX + panelWidth - buttonWidth - 20;
+      const nextBtnY = panelY + panelHeight - buttonHeight - 15;
+      ctx.fillStyle = "#4CAF50";
+      roundedRect(nextBtnX, nextBtnY, buttonWidth, buttonHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText("Try Now!", nextBtnX + buttonWidth / 2, nextBtnY + buttonHeight / 2 + 5);
+    }
   }
   
   ctx.textAlign = "left";
@@ -1498,6 +1715,26 @@ function render() {
     ctx.textAlign = "left";
   }
   
+  // Draw contamination alert
+  if (contaminationAlertMessage && contaminationAlertTimer > 0) {
+    const alertY = 220;
+    const alertX = canvas.width / 2;
+    
+    ctx.textAlign = "center";
+    
+    // Draw contamination alert text
+    ctx.fillStyle = "#F44336";
+    ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.fillText(contaminationAlertMessage, alertX, alertY);
+    
+    // Draw contamination count
+    ctx.fillStyle = "#D32F2F";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.fillText(`Contaminations: ${contaminationCount}/3`, alertX, alertY + 35);
+    
+    ctx.textAlign = "left";
+  }
+  
   // Draw item FIRST (so it appears behind bins when overlapping)
   // Draw item even when it's going into the bin (up to 60 pixels deep)
   // Don't draw item during transitions
@@ -1578,29 +1815,116 @@ function drawTrashPile() {
   const pileHeight = (trashPileHeight / maxTrashPileHeight) * 200;  // Max height 200px
   const actualPileY = pileY - pileHeight;
   
-  // Draw trash pile as a messy stack
-  ctx.fillStyle = "#5D4037";
+  // Helper function for seeded random based on index
+  const seededRandom = (seed) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+  
+  // Draw base trash pile with irregular shape
+  ctx.fillStyle = "#4A3428";
   ctx.beginPath();
   ctx.moveTo(pileX, pileY);
   ctx.lineTo(pileX + pileWidth, pileY);
-  ctx.lineTo(pileX + pileWidth - 10, actualPileY);
+  // Create irregular top edge
+  const topPoints = 8;
+  for (let i = 0; i <= topPoints; i++) {
+    const t = i / topPoints;
+    const x = pileX + pileWidth - (pileWidth - 20) * t - 10;
+    const y = actualPileY + Math.sin(t * Math.PI * 3 + animationFrame * 0.1) * 8 + seededRandom(i * 5) * 5;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
   ctx.lineTo(pileX + 10, actualPileY);
   ctx.closePath();
   ctx.fill();
   
-  // Add some trash items sticking out
-  ctx.fillStyle = "#8D6E63";
-  for (let i = 0; i < 5; i++) {
-    const offsetX = pileX + (i * 20) + Math.sin(i) * 5;
-    const offsetY = actualPileY + Math.cos(i) * 3;
-    ctx.fillRect(offsetX, offsetY, 15, 10);
+  // Add darker shadow/overlap areas
+  ctx.fillStyle = "#3D2A1F";
+  ctx.beginPath();
+  ctx.moveTo(pileX + 5, pileY);
+  ctx.lineTo(pileX + pileWidth - 5, pileY);
+  ctx.lineTo(pileX + pileWidth - 15, actualPileY + 10);
+  ctx.lineTo(pileX + 15, actualPileY + 10);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Add various trash items sticking out with different shapes and colors
+  const trashColors = ["#6B4423", "#8D6E63", "#5D4037", "#795548", "#6D4C41", "#8B6F47"];
+  
+  // Generate consistent trash items
+  for (let i = 0; i < 12; i++) {
+    const seed = i * 7 + trashPileHeight;
+    const baseX = pileX + seededRandom(seed) * pileWidth;
+    const baseY = actualPileY + seededRandom(seed + 1) * pileHeight;
+    const size = 8 + seededRandom(seed + 2) * 15;
+    const shapeType = Math.floor(seededRandom(seed + 3) * 3);
+    const color = trashColors[Math.floor(seededRandom(seed + 4) * trashColors.length)];
+    
+    ctx.fillStyle = color;
+    ctx.save();
+    ctx.translate(baseX, baseY);
+    ctx.rotate(seededRandom(seed + 5) * Math.PI * 0.5);
+    
+    if (shapeType === 0) {
+      // Rectangular trash
+      ctx.fillRect(-size/2, -size/3, size, size * 0.6);
+    } else if (shapeType === 1) {
+      // Circular trash
+      ctx.beginPath();
+      ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Triangular trash
+      ctx.beginPath();
+      ctx.moveTo(0, -size/2);
+      ctx.lineTo(-size/2, size/2);
+      ctx.lineTo(size/2, size/2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    ctx.restore();
   }
   
-  // Draw trash pile label
+  // Add some plastic bottles/cans sticking out
+  for (let i = 0; i < 4; i++) {
+    const seed = i * 11 + trashPileHeight;
+    const bottleX = pileX + 15 + i * 25 + Math.sin(i + animationFrame * 0.05) * 8;
+    const bottleY = actualPileY - 5 + Math.cos(i) * 3;
+    const bottleHeight = 20 + seededRandom(seed) * 10;
+    const bottleWidth = 8 + seededRandom(seed + 1) * 4;
+    
+    // Bottle body
+    ctx.fillStyle = "#8B7355";
+    ctx.fillRect(bottleX - bottleWidth/2, bottleY, bottleWidth, bottleHeight);
+    
+    // Bottle top
+    ctx.fillStyle = "#6B5B47";
+    ctx.fillRect(bottleX - bottleWidth/2 - 1, bottleY, bottleWidth + 2, 3);
+  }
+  
+  // Add texture with consistent dark spots
+  ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+  for (let i = 0; i < 15; i++) {
+    const seed = i * 13 + trashPileHeight;
+    const spotX = pileX + seededRandom(seed) * pileWidth;
+    const spotY = actualPileY + seededRandom(seed + 1) * pileHeight;
+    const spotSize = 3 + seededRandom(seed + 2) * 5;
+    ctx.beginPath();
+    ctx.arc(spotX, spotY, spotSize, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Draw trash pile label with background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  roundedRect(pileX - 2, actualPileY - 22, 100, 18, 4);
+  ctx.fill();
+  
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
-  ctx.fillText(`Trash: ${Math.round(trashPileHeight)}%`, pileX, actualPileY - 5);
+  ctx.fillText(`Trash: ${Math.round(trashPileHeight)}%`, pileX + 2, actualPileY - 8);
 }
 
 
@@ -1706,11 +2030,16 @@ function drawGameOverScreen() {
   ctx.lineWidth = 4;
   ctx.stroke();
   
-  // Message
+  // Message (handle multiple lines)
   ctx.fillStyle = "#2D3748";
-  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText(gameOverMessage, panelX + panelWidth / 2, panelY + 70);
+  const messageLines = gameOverMessage.split('\n');
+  let messageY = panelY + 60;
+  messageLines.forEach(line => {
+    ctx.fillText(line, panelX + panelWidth / 2, messageY);
+    messageY += 30;
+  });
   
   ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.fillText(`Final Score: ${score} | Level: ${level}`, panelX + panelWidth / 2, panelY + 120);
