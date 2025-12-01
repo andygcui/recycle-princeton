@@ -156,16 +156,32 @@ const maxTrashPileHeight = 100;
 let greenBinContaminated = false;
 let contaminationTimer = 0;
 const contaminationDuration = 180;  // frames
-let contaminationCount = 0;  // Track number of contaminations
-let contaminationAlertTimer = 0;  // Timer for showing contamination alert
-const contaminationAlertDuration = 180;  // frames to show alert
-let contaminationAlertMessage = "";  // Contamination alert message
+let contaminationCounts = {};  // Track contamination count per bin category: { "green": 2, "orange": 1 }
+let contaminatedBins = new Set();  // Track which bins are contaminated (by category: "green", "orange")
 let hasSeenContaminationPopup = false;  // Track if user has seen contamination explanation popup
 let showContaminationPopup = false;  // Show contamination popup on first contamination
+
+// Decontamination mini-game
+let decontaminationActive = false;  // Is decontamination game active
+let decontaminationBinCategory = null;  // Which bin category is being decontaminated
+let decontaminationBinX = 0;  // X position of bin in decontamination game
+let decontaminationBinWidth = 120;  // Width of bin in decontamination game
+let decontaminationBinY = 0;  // Y position of bin (at bottom)
+let decontaminationItems = [];  // Array of items falling in decontamination game
+let decontaminationItemSpeed = 3;  // Speed of items falling
+let decontaminationSpawnTimer = 0;  // Timer for spawning new items
+let decontaminationSpawnInterval = 60;  // Frames between item spawns
+let decontaminationCorrectCount = 0;  // Count of correct items collected
+let decontaminationRequiredCorrect = 5;  // Need 5 correct items to decontaminate
+let decontaminationWrongCount = 0;  // Count of wrong items collected
+let decontaminationMaxWrong = 3;  // 3 wrong items = fail
+let decontaminationCooldowns = {};  // Track cooldown timers per bin category: { "green": 1800 }
+const decontaminationCooldownDuration = 1800;  // 30 seconds at 60fps
 
 // Fake leaderboard and PvP
 let showLeaderboard = false;
 let showPvP = false;
+let showHelpPanel = false;  // Show help panel with controls and plastics grid
 
 // Tutorial system
 let tutorialActive = false;
@@ -209,13 +225,13 @@ const tutorialSteps = [
   },
   {
     title: "Try It: Water Bottle",
-    text: "Let's practice! A water bottle is made from PET (polyethylene terephthalate).\n\nPET, plastic type #1, goes in the GREEN bin because it's widely recyclable in Princeton!",
+    text: "Let's practice! A water bottle is made from PET (polyethylene terephthalate).\n\nPET, plastic type #1, goes in the GREEN bin because it's widely recyclable in Princeton! \n\n Use arrow keys to move the water bottle into the GREEN bin!",
     highlight: null,
     action: "setItem",
     itemName: "Water bottle",
     interactive: true,  // Allow game to run during this step
     substeps: [
-      { title: "Try It: Water Bottle", text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!" },
+      { title: "Try It: Water Bottle", text: "Let's practice! A water bottle is made from PET (polyethylene terephthalate), plastic type #1.\n\nUse arrow keys to move the water bottle into the GREEN bin, because it's widely recyclable in Princeton!" },
       { title: "Ready?", text: "Use the arrow keys to move the water bottle into the GREEN bin!\n\nTry it now!" }
     ]
   },
@@ -233,7 +249,7 @@ const tutorialSteps = [
     itemName: "Water bottle",
     interactive: true,
     substeps: [
-      { title: "Try It: Choose the Code", text: "Now choose the specific plastic code! The water bottle is PET, which is code #1.\n\nPut it in the #1 bin!" },
+      { title: "Try It: Choose the Code", text: "Now choose the specific plastic code! The water bottle is PET, which is plastic type #1.\n\nUse arrow keys to move it in the #1 bin!" },
       { title: "Ready?", text: "Use the arrow keys to move the water bottle into the #1 bin!\n\nTry it now!" }
     ]
   },
@@ -358,6 +374,17 @@ function initGame() {
     // Handle contamination popup dismissal
     if (showContaminationPopup) {
       showContaminationPopup = false;
+      // Reset item after popup is dismissed so next item can fall
+      if (currentItem) {
+        resetItem();
+        pickRandomItem();
+      }
+      return;
+    }
+    
+    // Handle help panel dismissal
+    if (showHelpPanel) {
+      showHelpPanel = false;
       return;
     }
     
@@ -398,6 +425,36 @@ function initGame() {
         y >= pvpBtnY && y <= pvpBtnY + pvpBtnHeight) {
       showPvP = !showPvP;
       showLeaderboard = false;
+    }
+    
+    // Check clicks on contaminated bins for decontamination (only if tutorial not active and not in decontamination game)
+    if (!tutorialActive && !decontaminationActive) {
+      for (let i = 0; i < bins.length; i++) {
+        const bin = bins[i];
+        if (contaminatedBins.has(bin.category) && contaminationCounts[bin.category]) {
+          // Check if click is on this bin
+          if (x >= bin.x && x <= bin.x + bin.width && 
+              y >= bin.y && y <= bin.y + bin.height) {
+            // Check if cooldown has expired
+            if (!decontaminationCooldowns[bin.category] || decontaminationCooldowns[bin.category] === 0) {
+              startDecontaminationGame(bin.category);
+              return;
+            }
+          }
+        }
+      }
+    }
+    
+    // Check clicks on help button (bottom right) - only if tutorial not active
+    if (!tutorialActive) {
+      const helpBtnSize = 40;
+      const helpBtnX = canvas.width - helpBtnSize - 15;
+      const helpBtnY = canvas.height - helpBtnSize - 15;
+      if (x >= helpBtnX && x <= helpBtnX + helpBtnSize && 
+          y >= helpBtnY && y <= helpBtnY + helpBtnSize) {
+        showHelpPanel = !showHelpPanel;
+        return;
+      }
     }
     
     // Check clicks on tutorial buttons
@@ -1072,6 +1129,18 @@ window.addEventListener("keydown", (e) => {
   if (showContaminationPopup) {
     e.preventDefault();
     showContaminationPopup = false;
+    // Reset item after popup is dismissed so next item can fall
+    if (currentItem) {
+      resetItem();
+      pickRandomItem();
+    }
+    return;
+  }
+  
+  // Handle help panel dismissal
+  if (showHelpPanel) {
+    e.preventDefault();
+    showHelpPanel = false;
     return;
   }
   
@@ -1117,6 +1186,25 @@ window.addEventListener("keydown", (e) => {
       // Don't process other keys during tutorial panels
       return;
     }
+  }
+  
+  // Handle C key for decontamination (only if not in tutorial and not in decontamination game)
+  if (!tutorialActive && !decontaminationActive && (e.key === "c" || e.key === "C")) {
+    e.preventDefault();
+    startDecontaminationForFirstContaminatedBin();
+    return;
+  }
+  
+  // Handle decontamination game controls
+  if (decontaminationActive) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      keys.left = true;
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      keys.right = true;
+    }
+    return;
   }
   
   if (e.key === "ArrowLeft") keys.left = true;
@@ -1181,9 +1269,25 @@ window.addEventListener("keyup", (e) => {
 // GAME LOGIC
 // ============================================================================
 function update() {
-  // Pause game when hints off popup, new items popup, or contamination popup is shown
-  if (showHintsOffPopup || showNewItemsPopup || showContaminationPopup) {
+  // Pause game when hints off popup, new items popup, contamination popup, or help panel is shown
+  if (showHintsOffPopup || showNewItemsPopup || showContaminationPopup || showHelpPanel) {
     return; // Don't update game logic while popup is shown
+  }
+  
+  // Handle decontamination game separately
+  if (decontaminationActive) {
+    updateDecontaminationGame();
+    return;
+  }
+  
+  // Update decontamination cooldowns
+  for (let category in decontaminationCooldowns) {
+    if (decontaminationCooldowns[category] > 0) {
+      decontaminationCooldowns[category]--;
+      if (decontaminationCooldowns[category] === 0) {
+        delete decontaminationCooldowns[category];
+      }
+    }
   }
   
   // Update timers
@@ -1232,14 +1336,6 @@ function update() {
     contaminationTimer--;
     if (contaminationTimer === 0) {
       greenBinContaminated = false;
-    }
-  }
-  
-  // Update contamination alert timer
-  if (contaminationAlertTimer > 0) {
-    contaminationAlertTimer--;
-    if (contaminationAlertTimer === 0) {
-      contaminationAlertMessage = "";
     }
   }
   
@@ -1382,20 +1478,6 @@ function checkBinCollision() {
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
-          // Don't count score/level progression during tutorial
-          if (!tutorialActive) {
-            score++;
-            
-            // Only count level progression if this is the first try
-            if (itemAttempts === 0) {
-              // Track if this is a new item that was correctly sorted
-              if (newItemsForCurrentLevel.includes(currentItem.name)) {
-                newItemsSortedThisLevel.add(currentItem.name);
-              }
-              checkLevelProgression();
-            }
-          }
-          
           // Set transition flag to prevent updates
           isTransitioning = true;
           
@@ -1435,32 +1517,45 @@ function checkBinCollision() {
                                    (currentItem.category === "red" && bin.category === "orange");
             
             if (isContamination) {
-              contaminationCount++;
+              // Increment contamination count for this specific bin
+              if (!contaminationCounts[bin.category]) {
+                contaminationCounts[bin.category] = 0;
+              }
+              contaminationCounts[bin.category]++;
+              
+              // Mark this bin as contaminated
+              contaminatedBins.add(bin.category);
               if (bin.category === "green") {
                 greenBinContaminated = true;
                 contaminationTimer = contaminationDuration;
               }
-              contaminationAlertMessage = "CONTAMINATION ALERT!";
-              contaminationAlertTimer = contaminationAlertDuration;
               
               // Show contamination popup on first contamination
               if (!hasSeenContaminationPopup) {
                 hasSeenContaminationPopup = true;
-                // Wait for animations to finish before showing popup
-                const bounceDelayMs = (binBounceDuration / 60) * 1000;
+                // Wait for shake animations to finish before showing popup
+                const shakeDelayMs = (binShakeDuration / 60) * 1000;
                 setTimeout(() => {
                   showContaminationPopup = true;
-                }, bounceDelayMs);
+                  // Don't reset item here - wait for popup dismissal
+                }, shakeDelayMs);
+              } else {
+                // If popup already shown, reset item immediately
+                resetItem();
               }
               
-              // End game after 3 contaminations
-              if (contaminationCount >= 3) {
+              // End game if this specific bin reaches 3 contaminations
+              if (contaminationCounts[bin.category] >= 3) {
                 setTimeout(() => {
                   endGame(false);
-                  gameOverMessage = "Game Over!\nThe bin is too contaminated.";
+                  gameOverMessage = `Game Over!\nThe ${bin.category} bin is too contaminated.`;
                 }, 1000);
               }
               // Don't add to trash pile for contamination
+              // Don't reset item here - wait for popup or reset immediately if popup already shown
+              messageTimer = messageDuration;
+              educationalTimer = educationalDuration;
+              return; // Exit early to prevent normal resetItem() call
             }
             // If recyclable plastic dropped into red/orange bin, add to trash pile
             else if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
@@ -1601,9 +1696,11 @@ function restartGame() {
   trashPileHeight = 0;
   greenBinContaminated = false;
   contaminationTimer = 0;
-  contaminationCount = 0;
-  contaminationAlertTimer = 0;
-  contaminationAlertMessage = "";
+  contaminationCounts = {};
+  contaminatedBins.clear();
+  decontaminationActive = false;
+  decontaminationBinCategory = null;
+  decontaminationCooldowns = {};
   phase = "category";
   codePhaseCategory = null;
   itemSpeedY = baseSpeedY;
@@ -1821,20 +1918,20 @@ function drawTutorial() {
   // Title - use substep title if available
   const displayTitle = currentSubStep ? currentSubStep.title : step.title;
   ctx.fillStyle = "#2D3748";
-  ctx.font = isInteractive ? "bold 22px 'Comic Sans MS', 'Trebuchet MS', Arial" : "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";  // Same size for all steps
   ctx.textAlign = "center";
-  ctx.fillText(displayTitle, panelX + panelWidth / 2, panelY + (isInteractive ? 25 : 40));
+  ctx.fillText(displayTitle, panelX + panelWidth / 2, panelY + 40);  // Uniform title position for all steps
   
   // Text (with line breaks) - use substep text if available
   const displayText = currentSubStep ? currentSubStep.text : step.text;
   ctx.fillStyle = "#4A5568";
-  ctx.font = isInteractive ? "16px 'Comic Sans MS', 'Trebuchet MS', Arial" : "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";  // Same size for all steps
   ctx.textAlign = "left";
   const lines = displayText.split('\n');
-  let textY = panelY + (isInteractive ? 50 : 80);
-  const lineHeight = isInteractive ? 20 : 26;
+  let textY = panelY + 80;  // Uniform text position for all steps
+  const lineHeight = 26;  // Uniform line height for all steps
   lines.forEach(line => {
-    const wrappedLines = wrapText(ctx, line, panelWidth - 60, isInteractive ? 16 : 18);
+    const wrappedLines = wrapText(ctx, line, panelWidth - 60, 18);  // Same font size for all steps
     wrappedLines.forEach(wrappedLine => {
       ctx.fillText(wrappedLine, panelX + 30, textY);
       textY += lineHeight;
@@ -1878,11 +1975,11 @@ function drawTutorial() {
     ctx.fillStyle = "#FFFFFF";
     ctx.fillText(tutorialStep === tutorialSteps.length - 1 ? "Play" : "Next", nextBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
     
-    // Step indicator (at the very bottom)
+    // Step indicator (centered between the buttons)
     ctx.fillStyle = "#999";
     ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
-    ctx.fillText(`Step ${tutorialStep + 1} of ${tutorialSteps.length}`, panelX + panelWidth / 2, panelY + panelHeight - 5);
+    ctx.fillText(`Step ${tutorialStep + 1} of ${tutorialSteps.length}`, panelX + panelWidth / 2, buttonY + buttonHeight / 2 + 5);
   } else {
     // Interactive step - show skip button and optionally Next button
     const buttonHeight = 35;
@@ -2138,6 +2235,208 @@ function drawHintsOffPopup() {
   ctx.textAlign = "left";
 }
 
+function drawContaminationPopup() {
+  // Draw dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw popup panel (similar to tutorial style)
+  const panelWidth = 600;
+  const panelHeight = 300;
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+  
+  // Draw panel background
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  // Draw panel border (red for contamination)
+  ctx.strokeStyle = "#F44336";
+  ctx.lineWidth = 4;
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.stroke();
+  
+  // Draw title
+  ctx.fillStyle = "#F44336";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Contamination Alert!", panelX + panelWidth / 2, panelY + 40);
+  
+  // Draw message with line breaks
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  const messageLines = [
+    "Putting the wrong item in a bin causes CONTAMINATION!",
+    "",
+    "This ruins entire batches of recyclables and wastes",
+    "everyone's effort. Always check the plastic code number!",
+    "",
+    "After 3 contaminations, you lose!."
+  ];
+  
+  let textY = panelY + 80;
+  const lineHeight = 26;
+  messageLines.forEach(line => {
+    if (line === "") {
+      textY += lineHeight / 2; // Add spacing for empty lines
+    } else {
+      const wrappedLines = wrapText(ctx, line, panelWidth - 60, 18);
+      wrappedLines.forEach(wrappedLine => {
+        ctx.fillText(wrappedLine, panelX + 30, textY);
+        textY += lineHeight;
+      });
+    }
+  });
+  
+  // Draw "press any key to continue" text at bottom
+  ctx.fillStyle = "#718096";
+  ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Press any key or click to continue", panelX + panelWidth / 2, panelY + panelHeight - 20);
+  
+  ctx.textAlign = "left";
+}
+
+function drawHelpPanel() {
+  // Draw dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Get all available items for current level
+  const availableItems = getAvailableItemsForLevel(level);
+  const itemsPerRow = 3;
+  const rows = Math.ceil(availableItems.length / itemsPerRow);
+  const itemImageSize = 80;
+  const itemSpacing = 20;
+  const itemPadding = 20;
+  
+  // Calculate panel dimensions
+  const panelWidth = 800;
+  const itemCellWidth = (panelWidth - (itemPadding * 2) - (itemSpacing * (itemsPerRow - 1))) / itemsPerRow;
+  const itemCellHeight = itemImageSize + 60; // Image + text space
+  const controlsHeight = 120;
+  const panelHeight = 100 + controlsHeight + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + 40;
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+  
+  // Draw panel background
+  ctx.fillStyle = "#FFFFFF";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  // Draw panel border
+  ctx.strokeStyle = "#2196F3";
+  ctx.lineWidth = 4;
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.stroke();
+  
+  // Draw title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Help & Controls", panelX + panelWidth / 2, panelY + 40);
+  
+  // Draw controls section
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  ctx.fillText("Controls:", panelX + itemPadding, panelY + 75);
+  
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  const controlsY = panelY + 100;
+  ctx.fillText("• Arrow Keys: Move items left and right", panelX + itemPadding, controlsY);
+  ctx.fillText("• ENTER: Drop item instantly", panelX + itemPadding, controlsY + 25);
+  ctx.fillText("• SHIFT: Speed up item movement", panelX + itemPadding, controlsY + 50);
+  ctx.fillText("• SPACE: Toggle hints on/off", panelX + itemPadding, controlsY + 75);
+  
+  // Draw plastics grid title
+  const gridTitleY = panelY + 100 + controlsHeight;
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.fillText("Available Plastics:", panelX + itemPadding, gridTitleY);
+  
+  // Draw items in grid
+  const startX = panelX + itemPadding;
+  const startY = gridTitleY + 30;
+  
+  availableItems.forEach((item, index) => {
+    const row = Math.floor(index / itemsPerRow);
+    const col = index % itemsPerRow;
+    
+    const cellX = startX + col * (itemCellWidth + itemSpacing);
+    const cellY = startY + row * (itemCellHeight + itemSpacing);
+    
+    // Get item image
+    const itemImageData = itemImages[item.name];
+    let itemImage = null;
+    if (itemImageData) {
+      if (Array.isArray(itemImageData)) {
+        itemImage = itemImageData[0]; // Use first variant
+      } else {
+        itemImage = itemImageData;
+      }
+    }
+    
+    // Draw item image
+    if (itemImage && itemImage.complete && itemImage.naturalWidth > 0) {
+      const imageX = cellX + (itemCellWidth - itemImageSize) / 2;
+      const imageY = cellY;
+      
+      // Calculate aspect ratio to fit image
+      const imgAspectRatio = itemImage.width / itemImage.height;
+      let drawWidth = itemImageSize;
+      let drawHeight = itemImageSize;
+      
+      if (imgAspectRatio > 1) {
+        drawHeight = itemImageSize / imgAspectRatio;
+      } else {
+        drawWidth = itemImageSize * imgAspectRatio;
+      }
+      
+      const drawX = imageX + (itemImageSize - drawWidth) / 2;
+      const drawY = imageY + (itemImageSize - drawHeight) / 2;
+      
+      ctx.drawImage(itemImage, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // Fallback: draw placeholder rectangle
+      ctx.fillStyle = "#E2E8F0";
+      ctx.fillRect(cellX + (itemCellWidth - itemImageSize) / 2, cellY, itemImageSize, itemImageSize);
+    }
+    
+    // Draw item name
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(item.name, cellX + itemCellWidth / 2, cellY + itemImageSize + 18);
+    
+    // Draw code number with category color
+    let codeColor = "#2D3748";
+    if (item.category === "green") {
+      codeColor = "#4CAF50";
+    } else if (item.category === "orange") {
+      codeColor = "#FF9800";
+    } else if (item.category === "red") {
+      codeColor = "#F44336";
+    }
+    
+    ctx.fillStyle = codeColor;
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`#${item.code}`, cellX + itemCellWidth / 2, cellY + itemImageSize + 38);
+  });
+  
+  // Draw "press any key to continue" text at bottom
+  ctx.fillStyle = "#718096";
+  ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Press any key or click to close", panelX + panelWidth / 2, panelY + panelHeight - 20);
+  
+  ctx.textAlign = "left";
+}
+
 function render() {
   // Apply screen shake for incorrect answers
   ctx.save();
@@ -2246,25 +2545,6 @@ function render() {
   // Removed feedback message - using visual animations instead
   // (bin bounce for correct, bin shake + screen shake for incorrect)
   
-  // Draw contamination alert
-  if (contaminationAlertMessage && contaminationAlertTimer > 0) {
-    const alertY = 220;
-    const alertX = canvas.width / 2;
-    
-    ctx.textAlign = "center";
-    
-    // Draw contamination alert text
-    ctx.fillStyle = "#F44336";
-    ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.fillText(contaminationAlertMessage, alertX, alertY);
-    
-    // Draw contamination count
-    ctx.fillStyle = "#D32F2F";
-    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.fillText(`Contaminations: ${contaminationCount}/3`, alertX, alertY + 35);
-    
-    ctx.textAlign = "left";
-  }
   
   // Draw item FIRST (so it appears behind bins when overlapping)
   // Draw item even when it's going into the bin (up to 60 pixels deep)
@@ -2322,12 +2602,28 @@ function render() {
     drawGameOverScreen();
   }
   
-  // Draw friendly instructions (only if tutorial not active)
+  // Draw question mark help button (only if tutorial not active)
   if (!tutorialActive) {
-    ctx.fillStyle = "#666666";
-    ctx.font = "13px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "right";
-    ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
+    const helpBtnSize = 40;
+    const helpBtnX = canvas.width - helpBtnSize - 15;
+    const helpBtnY = canvas.height - helpBtnSize - 15;
+    
+    // Draw button background
+    ctx.fillStyle = showHelpPanel ? "#4CAF50" : "rgba(255, 255, 255, 0.9)";
+    roundedRect(helpBtnX, helpBtnY, helpBtnSize, helpBtnSize, 8);
+    ctx.fill();
+    
+    // Draw border
+    ctx.strokeStyle = "#2196F3";
+    ctx.lineWidth = 2;
+    roundedRect(helpBtnX, helpBtnY, helpBtnSize, helpBtnSize, 8);
+    ctx.stroke();
+    
+    // Draw question mark
+    ctx.fillStyle = showHelpPanel ? "#FFFFFF" : "#2196F3";
+    ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("?", helpBtnX + helpBtnSize / 2, helpBtnY + helpBtnSize / 2 + 8);
     ctx.textAlign = "left";
   }
   
@@ -2344,6 +2640,11 @@ function render() {
   // Draw contamination popup (on top of everything except tutorial)
   if (showContaminationPopup) {
     drawContaminationPopup();
+  }
+  
+  // Draw help panel (on top of everything except tutorial)
+  if (showHelpPanel) {
+    drawHelpPanel();
   }
   
   // Draw tutorial overlay (on top of everything)
@@ -2886,18 +3187,22 @@ function drawBin(bin, binIndex) {
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
       ctx.textAlign = "center";
-      // Position at bottom, but leave space for contamination warning if needed
-      const bottomY = greenBinContaminated && bin.category === "green" 
-        ? binY + bin.height - 5 
-        : binY + bin.height + 12;
+      // Position at bottom
+      const bottomY = binY + bin.height + 12;
       ctx.fillText(codesText, centerX, bottomY);
     }
     
-    // Show contamination warning if contaminated
-    if (greenBinContaminated && bin.category === "green") {
+    // Draw exclamation marks above contaminated bin (show count)
+    if (contaminatedBins.has(bin.category) && contaminationCounts[bin.category]) {
+      const count = contaminationCounts[bin.category];
       ctx.fillStyle = "#FF0000";
-      ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.fillText("CONTAMINATED!", centerX, binY + bin.height - 8);
+      ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      // Draw multiple exclamation marks based on count
+      for (let i = 0; i < count && i < 3; i++) {
+        ctx.fillText("!", centerX - 20 + (i * 20), binY - 15);
+      }
+      ctx.textAlign = "left";
     }
   } else {
     // Code phase: show symbol in center, type at bottom
@@ -2937,6 +3242,15 @@ function drawBin(bin, binIndex) {
       ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
       ctx.textAlign = "center";
       ctx.fillText(labelWithoutNumber, centerX, binY + bin.height + 12);
+    }
+    
+    // Draw exclamation mark above contaminated bin (code phase)
+    if (contaminatedBins.has(bin.category)) {
+      ctx.fillStyle = "#FF0000";
+      ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("!", centerX, binY - 15);
+      ctx.textAlign = "left";
     }
   }
   
