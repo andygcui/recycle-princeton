@@ -130,6 +130,7 @@ let correctItemsThisLevel = 0;  // Track correct items recycled for current leve
 let baseSpeedY = 0.5;  // Base falling speed
 let gameOver = false;
 let gameOverMessage = "";
+let gamePaused = false;  // Pause state
 
 // Level-based item unlocking
 const ITEMS_BY_LEVEL = {
@@ -182,6 +183,7 @@ const decontaminationCooldownDuration = 1800;  // 30 seconds at 60fps
 let showLeaderboard = false;
 let showPvP = false;
 let showHelpPanel = false;  // Show help panel with controls and plastics grid
+let helpPanelScrollY = 0;  // Scroll position for help panel
 
 // Tutorial system
 let tutorialActive = false;
@@ -273,7 +275,7 @@ const tutorialSteps = [
   },
   {
     title: "Controls",
-    text: "Use ARROW KEYS to move items left and right.\nPress ENTER to drop instantly.\nPress SHIFT to speed up.\nPress SPACE to toggle hints.",
+    text: "Use ARROW KEYS to move items left and right.\nPress ENTER to drop instantly.\nPress SHIFT to speed up.\nPress SPACE to pause.\nPress X to toggle hints.",
     highlight: null,
     action: null
   }
@@ -298,9 +300,7 @@ let binBounceDuration = 40; // frames
 let bouncingBinIndex = -1;  // Index of the bin that should bounce (-1 = none)
 let binShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
 let binShakeDuration = 30; // frames
-let screenShakeTimer = 0;  // Timer for screen shake (incorrect answer)
-let screenShakeDuration = 20; // frames
-let screenShakeIntensity = 0;  // Current shake intensity
+let shakingBinIndex = -1;  // Index of the bin that should shake (-1 = none)
 
 // Image loading
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
@@ -309,6 +309,7 @@ let recycleSymbolImage = null;  // Recycling symbol image
 let greenBinImage = null;  // Green bin image
 let yellowBinImage = null;  // Yellow/Orange bin image
 let redBinImage = null;  // Red bin image
+let stopImage = null;  // Stop sign image for contamination indicator
 
 // Keyboard state
 const keys = {
@@ -332,6 +333,7 @@ function initGame() {
   loadGreenBinImage();
   loadYellowBinImage();
   loadRedBinImage();
+  loadStopImage();
   
   // Initialize new items for level 1
   updateNewItemsForLevel();
@@ -385,6 +387,7 @@ function initGame() {
     // Handle help panel dismissal
     if (showHelpPanel) {
       showHelpPanel = false;
+      helpPanelScrollY = 0; // Reset scroll position
       return;
     }
     
@@ -693,6 +696,17 @@ function loadRedBinImage() {
   };
 }
 
+function loadStopImage() {
+  const img = new Image();
+  img.src = 'images/stop.png';
+  img.onload = () => {
+    stopImage = img;
+  };
+  img.onerror = () => {
+    console.log('Stop image not found');
+  };
+}
+
 // Load images for items
 function loadImages() {
   let loadedCount = 0;
@@ -914,8 +928,8 @@ function pickRandomItem() {
   
   if (availableItems.length === 0) {
     // Fallback to all items if something goes wrong
-    const randomIndex = Math.floor(Math.random() * ITEMS.length);
-    currentItem = ITEMS[randomIndex];
+  const randomIndex = Math.floor(Math.random() * ITEMS.length);
+  currentItem = ITEMS[randomIndex];
   } else {
     // Create weighted array: new items get 2x weight
     const weightedItems = [];
@@ -1217,7 +1231,10 @@ window.addEventListener("keydown", (e) => {
   if (e.key === " ") {
     e.preventDefault();
     keys.space = true;
-    showHints = !showHints; // Toggle hints (demo mode)
+    // Toggle pause (only if not in tutorial, popups, or decontamination game)
+    if (!tutorialActive && !showHintsOffPopup && !showNewItemsPopup && !showContaminationPopup && !showHelpPanel && !decontaminationActive && !gameOver) {
+      gamePaused = !gamePaused;
+    }
   }
   if (e.key === "Enter") {
     e.preventDefault();
@@ -1236,10 +1253,12 @@ window.addEventListener("keydown", (e) => {
     showLeaderboard = !showLeaderboard;
     showPvP = false;  // Close PvP if open
   }
-  if (e.key === "p" || e.key === "P") {
-    // Toggle PvP
-    showPvP = !showPvP;
-    showLeaderboard = false;  // Close leaderboard if open
+  if (e.key === "x" || e.key === "X") {
+    // Toggle hints (only if not in tutorial, popups, or decontamination game)
+    if (!tutorialActive && !showHintsOffPopup && !showNewItemsPopup && !showContaminationPopup && !showHelpPanel && !decontaminationActive && !gameOver) {
+      e.preventDefault();
+      showHints = !showHints;
+    }
   }
   if (e.key === "t" || e.key === "T") {
     // Restart tutorial (for testing/debugging)
@@ -1254,6 +1273,18 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("keyup", (e) => {
+  // Handle decontamination game controls
+  if (decontaminationActive) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      keys.left = false;
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      keys.right = false;
+    }
+    return;
+  }
+  
   if (e.key === "ArrowLeft") keys.left = false;
   if (e.key === "ArrowRight") keys.right = false;
   if (e.key === "ArrowDown") keys.down = false;
@@ -1265,13 +1296,28 @@ window.addEventListener("keyup", (e) => {
   if (e.key === "Enter") keys.enter = false;
 });
 
+// Handle mouse wheel for help panel scrolling
+window.addEventListener("wheel", (e) => {
+  if (showHelpPanel) {
+    e.preventDefault();
+    const scrollAmount = 30; // Pixels to scroll per wheel event
+    if (e.deltaY > 0) {
+      // Scroll down
+      helpPanelScrollY = Math.min(helpPanelScrollY + scrollAmount, Infinity); // Will be clamped in drawHelpPanel
+    } else {
+      // Scroll up
+      helpPanelScrollY = Math.max(helpPanelScrollY - scrollAmount, 0);
+    }
+  }
+});
+
 // ============================================================================
 // GAME LOGIC
 // ============================================================================
 function update() {
-  // Pause game when hints off popup, new items popup, contamination popup, or help panel is shown
-  if (showHintsOffPopup || showNewItemsPopup || showContaminationPopup || showHelpPanel) {
-    return; // Don't update game logic while popup is shown
+  // Pause game when paused, hints off popup, new items popup, contamination popup, or help panel is shown
+  if (gamePaused || showHintsOffPopup || showNewItemsPopup || showContaminationPopup || showHelpPanel) {
+    return; // Don't update game logic while paused or popup is shown
   }
   
   // Handle decontamination game separately
@@ -1320,15 +1366,9 @@ function update() {
   // Update bin shake animation (incorrect answer)
   if (binShakeTimer > 0) {
     binShakeTimer--;
-  }
-  
-  // Update screen shake (incorrect answer)
-  if (screenShakeTimer > 0) {
-    screenShakeTimer--;
-    // Decay shake intensity
-    screenShakeIntensity = (screenShakeTimer / screenShakeDuration) * 8; // Max 8 pixels
-  } else {
-    screenShakeIntensity = 0;
+    if (binShakeTimer === 0) {
+      shakingBinIndex = -1; // Reset when animation ends
+    }
   }
   
   // Update contamination timer
@@ -1379,51 +1419,51 @@ function update() {
   
   // Don't update item position during transitions
   if (!isTransitioning) {
-    // Handle horizontal movement
-    const moveSpeed = 2;
-    if (keys.left) {
-      itemSpeedX = -moveSpeed;
-    } else if (keys.right) {
-      itemSpeedX = moveSpeed;
-    } else {
-      itemSpeedX = 0;
-    }
-    
-    // Update item position
-    itemX += itemSpeedX;
-    
-    // Keep item within canvas bounds
-    if (itemX < 0) itemX = 0;
-    if (itemX + itemWidth > canvas.width) itemX = canvas.width - itemWidth;
-    
-    // Handle fall speed
-    let currentSpeedY = itemSpeedY;
-    if (keys.shift) {
-      // Shift = speed up (3x faster while held)
-      currentSpeedY *= 3;
-    } else if (keys.down) {
-      // Down arrow = slightly faster
-      currentSpeedY *= 1.5;
-    }
-    
-    // Update vertical position
-    // Continue falling even after collision detected, so item goes into bin visually
-    itemY += currentSpeedY;
-    
-    // Check collision with bins (only once per item)
-    // Item must go 60 pixels deep into the bin before collision is detected
-    if (!hasCollided && bins.length > 0 && itemY + itemHeight >= bins[0].y + 60) {
-      hasCollided = true;
-      checkBinCollision();
-    }
-    
-    // Reset if item falls off screen (adds to trash pile)
-    if (itemY > canvas.height) {
+  // Handle horizontal movement
+  const moveSpeed = 2;
+  if (keys.left) {
+    itemSpeedX = -moveSpeed;
+  } else if (keys.right) {
+    itemSpeedX = moveSpeed;
+  } else {
+    itemSpeedX = 0;
+  }
+  
+  // Update item position
+  itemX += itemSpeedX;
+  
+  // Keep item within canvas bounds
+  if (itemX < 0) itemX = 0;
+  if (itemX + itemWidth > canvas.width) itemX = canvas.width - itemWidth;
+  
+  // Handle fall speed
+  let currentSpeedY = itemSpeedY;
+  if (keys.shift) {
+    // Shift = speed up (3x faster while held)
+    currentSpeedY *= 3;
+  } else if (keys.down) {
+    // Down arrow = slightly faster
+    currentSpeedY *= 1.5;
+  }
+  
+  // Update vertical position
+  // Continue falling even after collision detected, so item goes into bin visually
+  itemY += currentSpeedY;
+  
+  // Check collision with bins (only once per item)
+  // Item must go 60 pixels deep into the bin before collision is detected
+  if (!hasCollided && bins.length > 0 && itemY + itemHeight >= bins[0].y + 60) {
+    hasCollided = true;
+    checkBinCollision();
+  }
+  
+  // Reset if item falls off screen (adds to trash pile)
+  if (itemY > canvas.height) {
       if (!tutorialActive) {
-        addToTrashPile();
+    addToTrashPile();
       }
-      resetItem();
-    }
+    resetItem();
+  }
   }
   
   // Animate clouds (move slowly to the right)
@@ -1505,10 +1545,9 @@ function checkBinCollision() {
           flashColor = "red";
           flashTimer = flashDuration;
           
-          // Start bin shake and screen shake animations
+          // Start bin shake animation for the incorrect bin
           binShakeTimer = binShakeDuration;
-          screenShakeTimer = screenShakeDuration;
-          screenShakeIntensity = 8; // Start at max intensity
+          shakingBinIndex = i;
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
@@ -1526,8 +1565,8 @@ function checkBinCollision() {
               // Mark this bin as contaminated
               contaminatedBins.add(bin.category);
               if (bin.category === "green") {
-                greenBinContaminated = true;
-                contaminationTimer = contaminationDuration;
+            greenBinContaminated = true;
+            contaminationTimer = contaminationDuration;
               }
               
               // Show contamination popup on first contamination
@@ -1544,8 +1583,8 @@ function checkBinCollision() {
                 resetItem();
               }
               
-              // End game if this specific bin reaches 3 contaminations
-              if (contaminationCounts[bin.category] >= 3) {
+              // End game if this specific bin reaches 2 contaminations
+              if (contaminationCounts[bin.category] >= 2) {
                 setTimeout(() => {
                   endGame(false);
                   gameOverMessage = `Game Over!\nThe ${bin.category} bin is too contaminated.`;
@@ -1559,8 +1598,8 @@ function checkBinCollision() {
             }
             // If recyclable plastic dropped into red/orange bin, add to trash pile
             else if (currentItem.category === "green" && (bin.category === "red" || bin.category === "orange")) {
-              addToTrashPile();
-            } else {
+            addToTrashPile();
+          } else {
               addToTrashPile();  // Any other wrong bin adds to trash pile
             }
           }
@@ -1576,7 +1615,7 @@ function checkBinCollision() {
           
           // Don't count score/level progression during tutorial
           if (!tutorialActive) {
-            score++;
+          score++;
             
             // Only count level progression if this is the first try
             if (itemAttempts === 0) {
@@ -1584,7 +1623,7 @@ function checkBinCollision() {
               if (newItemsForCurrentLevel.includes(currentItem.name)) {
                 newItemsSortedThisLevel.add(currentItem.name);
               }
-              checkLevelProgression();
+          checkLevelProgression();
             }
           }
           
@@ -1622,12 +1661,12 @@ function checkBinCollision() {
           // Wait for bin bounce animation to finish before transitioning back to category phase
           const bounceDelayMs = (binBounceDuration / 60) * 1000;
           setTimeout(() => {
-            pickRandomItem();
-            phase = "category";
-            codePhaseCategory = null; // Reset category tracking
-            setupBins();
-            resetItem();
-            hasCollided = false;  // Reset collision flag for new item
+          pickRandomItem();
+          phase = "category";
+          codePhaseCategory = null; // Reset category tracking
+          setupBins();
+          resetItem();
+          hasCollided = false;  // Reset collision flag for new item
           }, bounceDelayMs);
         } else {
           // Wrong code - teach them!
@@ -1640,15 +1679,14 @@ function checkBinCollision() {
           flashColor = "red";
           flashTimer = flashDuration;
           
-          // Start bin shake and screen shake animations
+          // Start bin shake animation for the incorrect bin
           binShakeTimer = binShakeDuration;
-          screenShakeTimer = screenShakeDuration;
-          screenShakeIntensity = 8; // Start at max intensity
+          shakingBinIndex = i;
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
-            // Wrong code adds to trash pile
-            addToTrashPile();
+          // Wrong code adds to trash pile
+          addToTrashPile();
           }
           
           messageTimer = messageDuration;
@@ -1690,6 +1728,7 @@ function endGame(won) {
 function restartGame() {
   gameOver = false;
   gameOverMessage = "";
+  gamePaused = false;
   score = 0;
   level = 1;
   correctItemsThisLevel = 0;
@@ -1715,8 +1754,7 @@ function restartGame() {
   binBounceTimer = 0;
   bouncingBinIndex = -1;
   binShakeTimer = 0;
-  screenShakeTimer = 0;
-  screenShakeIntensity = 0;
+  shakingBinIndex = -1;
   updateNewItemsForLevel();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
@@ -1776,6 +1814,222 @@ function checkLevelProgression() {
 // Update new items list when level changes
 function updateNewItemsForLevel() {
   newItemsForCurrentLevel = ITEMS_BY_LEVEL[level] || [];
+}
+
+// ============================================================================
+// DECONTAMINATION GAME
+// ============================================================================
+function startDecontaminationForFirstContaminatedBin() {
+  // Find first contaminated bin
+  for (let category of contaminatedBins) {
+    if (contaminationCounts[category] && (!decontaminationCooldowns[category] || decontaminationCooldowns[category] === 0)) {
+      startDecontaminationGame(category);
+      return;
+    }
+  }
+}
+
+function startDecontaminationGame(category) {
+  decontaminationActive = true;
+  decontaminationBinCategory = category;
+  decontaminationBinX = canvas.width / 2 - decontaminationBinWidth / 2;
+  decontaminationBinY = canvas.height - 100;
+  decontaminationItems = [];
+  decontaminationSpawnTimer = 0;
+  decontaminationCorrectCount = 0;
+  decontaminationWrongCount = 0;
+}
+
+function updateDecontaminationGame() {
+  // Move bin left/right
+  const moveSpeed = 5;
+  if (keys.left) {
+    decontaminationBinX = Math.max(0, decontaminationBinX - moveSpeed);
+  }
+  if (keys.right) {
+    decontaminationBinX = Math.min(canvas.width - decontaminationBinWidth, decontaminationBinX + moveSpeed);
+  }
+  
+  // Spawn new items
+  decontaminationSpawnTimer++;
+  if (decontaminationSpawnTimer >= decontaminationSpawnInterval) {
+    decontaminationSpawnTimer = 0;
+    
+    // Get available items
+    const availableItems = getAvailableItemsForLevel(level);
+    const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
+    
+    // Determine if this item is correct for the bin category
+    const isCorrect = randomItem.category === decontaminationBinCategory;
+    
+    // Get item image
+    const itemImageData = itemImages[randomItem.name];
+    let itemImage = null;
+    if (itemImageData) {
+      itemImage = Array.isArray(itemImageData) ? itemImageData[0] : itemImageData;
+    }
+    
+    decontaminationItems.push({
+      item: randomItem,
+      x: Math.random() * (canvas.width - 80),
+      y: -100,
+      width: 80,
+      height: 80,
+      image: itemImage,
+      isCorrect: isCorrect
+    });
+  }
+  
+  // Update falling items
+  for (let i = decontaminationItems.length - 1; i >= 0; i--) {
+    const item = decontaminationItems[i];
+    item.y += decontaminationItemSpeed;
+    
+    // Check collision with bin
+    const binHeight = 80; // Medium height for decontamination game
+    if (item.y + item.height >= decontaminationBinY && 
+        item.y <= decontaminationBinY + binHeight &&
+        item.x + item.width >= decontaminationBinX &&
+        item.x <= decontaminationBinX + decontaminationBinWidth) {
+      // Item collected!
+      if (item.isCorrect) {
+        decontaminationCorrectCount++;
+      } else {
+        decontaminationWrongCount++;
+      }
+      decontaminationItems.splice(i, 1);
+      
+      // Check win/lose conditions
+      if (decontaminationCorrectCount >= decontaminationRequiredCorrect) {
+        endDecontaminationGame(true);
+        return;
+      }
+      if (decontaminationWrongCount >= decontaminationMaxWrong) {
+        endDecontaminationGame(false);
+        return;
+      }
+    } else if (item.y > canvas.height) {
+      // Item fell off screen - remove it
+      decontaminationItems.splice(i, 1);
+    }
+  }
+}
+
+function endDecontaminationGame(success) {
+  decontaminationActive = false;
+  
+  if (success) {
+    // Decontaminate the bin
+    contaminatedBins.delete(decontaminationBinCategory);
+    delete contaminationCounts[decontaminationBinCategory];
+    if (decontaminationBinCategory === "green") {
+      greenBinContaminated = false;
+    }
+  } else {
+    // Set cooldown
+    decontaminationCooldowns[decontaminationBinCategory] = decontaminationCooldownDuration;
+  }
+  
+  decontaminationBinCategory = null;
+  decontaminationItems = [];
+}
+
+function renderDecontaminationGame() {
+  // Draw sky gradient background (same as main game)
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, "#87CEEB");
+  gradient.addColorStop(1, "#E0F6FF");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw clouds in background (same as main game)
+  drawClouds();
+  
+  // Draw title
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 32px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(` ${decontaminationBinCategory.charAt(0).toUpperCase() + decontaminationBinCategory.slice(1)} decomtaminate bin asdf...`, canvas.width / 2, 50);
+  
+  // Draw instructions
+  ctx.fillStyle = "#CCCCCC";
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.fillText("asdf ", canvas.width / 2, 90);
+  
+  // Draw progress
+  ctx.fillStyle = "#4CAF50";
+  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(`Correct: ${decontaminationCorrectCount}/${decontaminationRequiredCorrect}`, 20, canvas.height - 60);
+  
+  ctx.fillStyle = "#F44336";
+  ctx.fillText(`Wrong: ${decontaminationWrongCount}/${decontaminationMaxWrong}`, 20, canvas.height - 30);
+  
+  // Draw bin using green.png image (smaller size for decontamination game)
+  const binHeight = 80; // Medium height for decontamination game
+  if (greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) {
+    // Scale image by 1.5x while maintaining aspect ratio (smaller than main game's 2x)
+    const imgAspectRatio = greenBinImage.width / greenBinImage.height;
+    const baseWidth = decontaminationBinWidth * 1.5;
+    const baseHeight = binHeight * 1.5;
+    
+    let drawWidth, drawHeight;
+    
+    // Calculate size maintaining aspect ratio at 1.5x scale
+    if (imgAspectRatio > (baseWidth / baseHeight)) {
+      // Image is wider - fit to width at 1.5x
+      drawWidth = baseWidth;
+      drawHeight = baseWidth / imgAspectRatio;
+    } else {
+      // Image is taller - fit to height at 1.5x
+      drawHeight = baseHeight;
+      drawWidth = baseHeight * imgAspectRatio;
+    }
+    
+    // Center the scaled image
+    const drawX = decontaminationBinX + (decontaminationBinWidth - drawWidth) / 2;
+    const drawY = decontaminationBinY + (binHeight - drawHeight) / 2;
+    
+    // Draw the bin image
+    ctx.drawImage(greenBinImage, drawX, drawY, drawWidth, drawHeight);
+  } else {
+    // Fallback to drawn bin if image not loaded
+    const binColor = decontaminationBinCategory === "green" ? "#4CAF50" : 
+                     decontaminationBinCategory === "orange" ? "#FF9800" : "#F44336";
+    ctx.fillStyle = binColor;
+    roundedRect(decontaminationBinX, decontaminationBinY, decontaminationBinWidth, binHeight, 8);
+    ctx.fill();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 3;
+    roundedRect(decontaminationBinX, decontaminationBinY, decontaminationBinWidth, binHeight, 8);
+    ctx.stroke();
+  }
+  
+  // Draw falling items
+  decontaminationItems.forEach(item => {
+    if (item.image && item.image.complete && item.image.naturalWidth > 0) {
+      const imgAspectRatio = item.image.width / item.image.height;
+      let drawWidth = item.width;
+      let drawHeight = item.height;
+      
+      if (imgAspectRatio > 1) {
+        drawHeight = item.width / imgAspectRatio;
+      } else {
+        drawWidth = item.height * imgAspectRatio;
+      }
+      
+      const drawX = item.x + (item.width - drawWidth) / 2;
+      const drawY = item.y + (item.height - drawHeight) / 2;
+      
+      ctx.drawImage(item.image, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // Fallback rectangle
+      ctx.fillStyle = item.isCorrect ? "#4CAF50" : "#F44336";
+      ctx.fillRect(item.x, item.y, item.width, item.height);
+    }
+  });
+  
+  ctx.textAlign = "left";
 }
 
 // ============================================================================
@@ -2270,10 +2524,9 @@ function drawContaminationPopup() {
   const messageLines = [
     "Putting the wrong item in a bin causes CONTAMINATION!",
     "",
-    "This ruins entire batches of recyclables and wastes",
-    "everyone's effort. Always check the plastic code number!",
+    "This ruins entire batches of recyclables!",
     "",
-    "After 3 contaminations, you lose!."
+    "After 2 contaminations in any given bin, you lose!."
   ];
   
   let textY = panelY + 80;
@@ -2312,12 +2565,27 @@ function drawHelpPanel() {
   const itemSpacing = 20;
   const itemPadding = 20;
   
-  // Calculate panel dimensions
-  const panelWidth = 800;
+  // Calculate panel dimensions (fixed size)
+  const panelWidth = 600;
+  const fixedPanelHeight = 500; // Fixed height
   const itemCellWidth = (panelWidth - (itemPadding * 2) - (itemSpacing * (itemsPerRow - 1))) / itemsPerRow;
   const itemCellHeight = itemImageSize + 60; // Image + text space
-  const controlsHeight = 120;
-  const panelHeight = 100 + controlsHeight + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + 40;
+  const controlsHeight = 90;
+  const gridTitleHeight = 30;
+  const footerHeight = 40;
+  const contentPadding = 20;
+  
+  // Calculate content area
+  const contentStartY = 100 + controlsHeight + gridTitleHeight;
+  const contentAreaHeight = fixedPanelHeight - contentStartY - footerHeight;
+  const totalContentHeight = rows * itemCellHeight + (rows > 1 ? (rows - 1) * itemSpacing : 0);
+  const needsScroll = totalContentHeight > contentAreaHeight;
+  
+  // Clamp scroll position
+  const maxScroll = Math.max(0, totalContentHeight - contentAreaHeight);
+  helpPanelScrollY = Math.max(0, Math.min(helpPanelScrollY, maxScroll));
+  
+  const panelHeight = fixedPanelHeight;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   
@@ -2340,17 +2608,15 @@ function drawHelpPanel() {
   
   // Draw controls section
   ctx.fillStyle = "#4A5568";
-  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
-  ctx.fillText("Controls:", panelX + itemPadding, panelY + 75);
+  ctx.fillText("Controls:", panelX + itemPadding, panelY + 70);
   
   ctx.fillStyle = "#4A5568";
-  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  const controlsY = panelY + 100;
-  ctx.fillText("• Arrow Keys: Move items left and right", panelX + itemPadding, controlsY);
-  ctx.fillText("• ENTER: Drop item instantly", panelX + itemPadding, controlsY + 25);
-  ctx.fillText("• SHIFT: Speed up item movement", panelX + itemPadding, controlsY + 50);
-  ctx.fillText("• SPACE: Toggle hints on/off", panelX + itemPadding, controlsY + 75);
+  ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  const controlsY = panelY + 90;
+  ctx.fillText("Arrow Keys: Move | ENTER: Drop | SHIFT: Speed up", panelX + itemPadding, controlsY);
+  ctx.fillText("SPACE: Pause | X: Toggle hints", panelX + itemPadding, controlsY + 20);
   
   // Draw plastics grid title
   const gridTitleY = panelY + 100 + controlsHeight;
@@ -2358,9 +2624,19 @@ function drawHelpPanel() {
   ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.fillText("Available Plastics:", panelX + itemPadding, gridTitleY);
   
-  // Draw items in grid
-  const startX = panelX + itemPadding;
-  const startY = gridTitleY + 30;
+  // Set up clipping for scrollable content area
+  const contentAreaY = gridTitleY + 30;
+  const contentAreaX = panelX + itemPadding;
+  const contentAreaWidth = panelWidth - (itemPadding * 2) - (needsScroll ? 20 : 0); // Reserve space for scrollbar
+  
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(contentAreaX, contentAreaY, contentAreaWidth, contentAreaHeight);
+  ctx.clip();
+  
+  // Draw items in grid (only visible ones)
+  const startX = contentAreaX;
+  const startY = contentAreaY - helpPanelScrollY;
   
   availableItems.forEach((item, index) => {
     const row = Math.floor(index / itemsPerRow);
@@ -2368,6 +2644,11 @@ function drawHelpPanel() {
     
     const cellX = startX + col * (itemCellWidth + itemSpacing);
     const cellY = startY + row * (itemCellHeight + itemSpacing);
+    
+    // Skip items that are outside the visible area
+    if (cellY + itemCellHeight < contentAreaY || cellY > contentAreaY + contentAreaHeight) {
+      return;
+    }
     
     // Get item image
     const itemImageData = itemImages[item.name];
@@ -2428,6 +2709,30 @@ function drawHelpPanel() {
     ctx.fillText(`#${item.code}`, cellX + itemCellWidth / 2, cellY + itemImageSize + 38);
   });
   
+  ctx.restore();
+  
+  // Draw scrollbar if needed
+  if (needsScroll) {
+    const scrollbarWidth = 12;
+    const scrollbarX = panelX + panelWidth - itemPadding - scrollbarWidth;
+    const scrollbarTrackHeight = contentAreaHeight;
+    const scrollbarThumbHeight = (contentAreaHeight / totalContentHeight) * scrollbarTrackHeight;
+    const scrollbarThumbY = contentAreaY + (helpPanelScrollY / totalContentHeight) * scrollbarTrackHeight;
+    
+    // Draw scrollbar track
+    ctx.fillStyle = "#E2E8F0";
+    ctx.fillRect(scrollbarX, contentAreaY, scrollbarWidth, scrollbarTrackHeight);
+    
+    // Draw scrollbar thumb
+    ctx.fillStyle = "#A0AEC0";
+    ctx.fillRect(scrollbarX + 2, scrollbarThumbY, scrollbarWidth - 4, scrollbarThumbHeight);
+    
+    // Draw scrollbar thumb border
+    ctx.strokeStyle = "#718096";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(scrollbarX + 2, scrollbarThumbY, scrollbarWidth - 4, scrollbarThumbHeight);
+  }
+  
   // Draw "press any key to continue" text at bottom
   ctx.fillStyle = "#718096";
   ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
@@ -2438,12 +2743,10 @@ function drawHelpPanel() {
 }
 
 function render() {
-  // Apply screen shake for incorrect answers
-  ctx.save();
-  if (screenShakeIntensity > 0) {
-    const shakeX = (Math.random() - 0.5) * screenShakeIntensity;
-    const shakeY = (Math.random() - 0.5) * screenShakeIntensity;
-    ctx.translate(shakeX, shakeY);
+  // Render decontamination game if active (separate from main game)
+  if (decontaminationActive) {
+    renderDecontaminationGame();
+    return;
   }
   
   // Draw sky gradient background
@@ -2584,8 +2887,13 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
-  // Draw trash pile in background
-  drawTrashPile();
+  // Draw trash percentage in bottom left corner
+  if (!tutorialActive && !decontaminationActive) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(`Trash: ${Math.round(trashPileHeight)}%`, 15, canvas.height - 15);
+  }
   
   // Draw fake leaderboard if shown
   if (showLeaderboard) {
@@ -2595,6 +2903,24 @@ function render() {
   // Draw fake PvP if shown
   if (showPvP) {
     drawFakePvP();
+  }
+  
+  // Draw pause overlay
+  if (gamePaused && !gameOver && !tutorialActive && !decontaminationActive) {
+    // Draw semi-transparent overlay
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw pause text
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 48px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2);
+    
+    ctx.fillStyle = "#CCCCCC";
+    ctx.font = "24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.fillText("Press SPACE to resume", canvas.width / 2, canvas.height / 2 + 50);
+    ctx.textAlign = "left";
   }
   
   // Draw game over screen
@@ -2624,7 +2950,7 @@ function render() {
     ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
     ctx.fillText("?", helpBtnX + helpBtnSize / 2, helpBtnY + helpBtnSize / 2 + 8);
-    ctx.textAlign = "left";
+  ctx.textAlign = "left";
   }
   
   // Draw new items popup (on top of everything except tutorial)
@@ -3043,7 +3369,8 @@ function drawBin(bin, binIndex) {
   }
   
   // Bin shake animation (incorrect answer) - rapid horizontal movement
-  if (binShakeTimer > 0) {
+  // Only shake the specific bin that was incorrect
+  if (binShakeTimer > 0 && shakingBinIndex === binIndex) {
     const shakeAmount = 5;
     // Rapid random shake
     offsetX = (Math.random() - 0.5) * shakeAmount * 2;
@@ -3094,23 +3421,8 @@ function drawBin(bin, binIndex) {
     drawX = binX + (bin.width - drawWidth) / 2;
     drawY = binY + (bin.height - drawHeight) / 2;
     
-    // Apply contamination tint if contaminated (only for green bin)
-    if (greenBinContaminated && isGreenBin) {
-      ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = "#FF6B6B";
-      ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
-      ctx.globalCompositeOperation = "source-over";
-    }
-    
     // Draw the bin image at original aspect ratio
     ctx.drawImage(binImage, drawX, drawY, drawWidth, drawHeight);
-    
-    // Draw red border if contaminated (only for green bin)
-    if (greenBinContaminated && isGreenBin) {
-      ctx.strokeStyle = "#FF0000";
-      ctx.lineWidth = 6;
-      ctx.strokeRect(drawX, drawY, drawWidth, drawHeight);
-    }
     
     ctx.restore();
   } else {
@@ -3118,44 +3430,39 @@ function drawBin(bin, binIndex) {
     // Create gradient for bin (with animation offsets)
     const binGradient = ctx.createLinearGradient(binX, binY, binX, binY + bin.height);
     let baseColor = bin.color;
-    
-    // Show contamination effect if green bin is contaminated
-    if (greenBinContaminated && bin.category === "green") {
-      baseColor = "#FF6B6B";  // Red tint for contamination
-    }
-    
-    binGradient.addColorStop(0, lightenColor(baseColor, 20));
-    binGradient.addColorStop(1, darkenColor(baseColor, 10));
-    
-    // Draw recycling bin shape (trapezoid - wider at top, narrower at bottom)
-    const topWidth = bin.width;
-    const bottomWidth = bin.width * 0.75; // Bottom is 75% of top width
-    const widthDiff = (topWidth - bottomWidth) / 2;
-    
-    ctx.fillStyle = binGradient;
-    ctx.beginPath();
+  
+  binGradient.addColorStop(0, lightenColor(baseColor, 20));
+  binGradient.addColorStop(1, darkenColor(baseColor, 10));
+  
+  // Draw recycling bin shape (trapezoid - wider at top, narrower at bottom)
+  const topWidth = bin.width;
+  const bottomWidth = bin.width * 0.75; // Bottom is 75% of top width
+  const widthDiff = (topWidth - bottomWidth) / 2;
+  
+  ctx.fillStyle = binGradient;
+  ctx.beginPath();
     ctx.moveTo(binX, binY); // Top left
     ctx.lineTo(binX + topWidth, binY); // Top right
     ctx.lineTo(binX + topWidth - widthDiff, binY + bin.height); // Bottom right
     ctx.lineTo(binX + widthDiff, binY + bin.height); // Bottom left
-    ctx.closePath();
-    ctx.fill();
-    
-    // Bin border (red if contaminated)
-    ctx.strokeStyle = greenBinContaminated && bin.category === "green" ? "#FF0000" : "#FFFFFF";
-    ctx.lineWidth = greenBinContaminated && bin.category === "green" ? 6 : 4;
-    ctx.stroke();
-    
-    // Inner highlight
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
+  ctx.closePath();
+  ctx.fill();
+  
+  // Bin border
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  // Inner highlight
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
     ctx.moveTo(binX + 2, binY + 2);
     ctx.lineTo(binX + topWidth - 2, binY + 2);
     ctx.lineTo(binX + topWidth - widthDiff - 2, binY + bin.height - 2);
     ctx.lineTo(binX + widthDiff + 2, binY + bin.height - 2);
-    ctx.closePath();
-    ctx.stroke();
+  ctx.closePath();
+  ctx.stroke();
   }
   
   // Draw bin content - symbol and numbers/icons together (with animation offsets)
@@ -3168,13 +3475,13 @@ function drawBin(bin, binIndex) {
                           (isRedBin && redBinImage && redBinImage.complete && redBinImage.naturalWidth > 0);
     
     if (!usingBinImage) {
-      if (recycleSymbolImage) {
-        const symbolSize = 40;
-        const symbolX = centerX - symbolSize / 2;
+    if (recycleSymbolImage) {
+      const symbolSize = 40;
+      const symbolX = centerX - symbolSize / 2;
         const symbolY = binY + bin.height / 2 - symbolSize / 2;
-        ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
-      } else {
-        // Fallback to drawn symbol if image not loaded
+      ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
+    } else {
+      // Fallback to drawn symbol if image not loaded
         drawRecyclingSymbol(centerX, binY + bin.height / 2, 30, "#FFFFFF");
       }
     }
@@ -3192,17 +3499,14 @@ function drawBin(bin, binIndex) {
       ctx.fillText(codesText, centerX, bottomY);
     }
     
-    // Draw exclamation marks above contaminated bin (show count)
+    // Draw stop sign image above contaminated bin (moved up 30px more, right 5px, 2x size)
     if (contaminatedBins.has(bin.category) && contaminationCounts[bin.category]) {
-      const count = contaminationCounts[bin.category];
-      ctx.fillStyle = "#FF0000";
-      ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.textAlign = "center";
-      // Draw multiple exclamation marks based on count
-      for (let i = 0; i < count && i < 3; i++) {
-        ctx.fillText("!", centerX - 20 + (i * 20), binY - 15);
+      if (stopImage && stopImage.complete && stopImage.naturalWidth > 0) {
+        const stopSize = 80; // 2x size (was 40, now 80)
+        const stopX = centerX - stopSize / 2 + 5; // Moved right 5px (was +3, now +5)
+        const stopY = binY - 120; // Moved up 30px more from -90 to -120
+        ctx.drawImage(stopImage, stopX, stopY, stopSize, stopSize);
       }
-      ctx.textAlign = "left";
     }
   } else {
     // Code phase: show symbol in center, type at bottom
@@ -3244,13 +3548,14 @@ function drawBin(bin, binIndex) {
       ctx.fillText(labelWithoutNumber, centerX, binY + bin.height + 12);
     }
     
-    // Draw exclamation mark above contaminated bin (code phase)
-    if (contaminatedBins.has(bin.category)) {
-      ctx.fillStyle = "#FF0000";
-      ctx.font = "bold 36px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("!", centerX, binY - 15);
-      ctx.textAlign = "left";
+    // Draw stop sign image above contaminated bin (code phase, moved up 30px more, right 5px, 2x size)
+    if (contaminatedBins.has(bin.category) && contaminationCounts[bin.category]) {
+      if (stopImage && stopImage.complete && stopImage.naturalWidth > 0) {
+        const stopSize = 80; // 2x size (was 40, now 80)
+        const stopX = centerX - stopSize / 2 + 5; // Moved right 5px (was +3, now +5)
+        const stopY = binY - 120; // Moved up 30px more from -90 to -120
+        ctx.drawImage(stopImage, stopX, stopY, stopSize, stopSize);
+      }
     }
   }
   
