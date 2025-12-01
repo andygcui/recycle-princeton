@@ -131,6 +131,23 @@ let baseSpeedY = 0.5;  // Base falling speed
 let gameOver = false;
 let gameOverMessage = "";
 
+// Level-based item unlocking
+const ITEMS_BY_LEVEL = {
+  1: ["Water bottle"],  // Level 1: Just water bottle
+  2: ["Soda bottle", "PVC pipe"],  // Level 2: Add these 2
+  3: ["Plastic bag", "Milk jug", "Styrofoam cup"],  // Level 3: Add these 3
+  4: ["Detergent bottle", "Yogurt cup", "Mixed plastic"]  // Level 4: Add the rest
+};
+
+// Track which new items have been correctly sorted in current level
+let newItemsSortedThisLevel = new Set();  // Track item names that were correctly sorted
+let newItemsForCurrentLevel = [];  // Items added in current level
+let itemAttempts = 0;  // Track attempts for current item (0 = first try)
+let showHintsOffPopup = false;  // Show popup when hints are turned off
+let hintsOffPopupTimer = 0;  // Timer for hints off popup
+const hintsOffPopupDuration = 300;  // frames to show popup (5 seconds)
+let showNewItemsPopup = false;  // Show popup when new items are unlocked
+
 // Trash pile system
 let trashPileHeight = 0;  // Height of trash pile (0-100, game ends at 100)
 const maxTrashPileHeight = 100;
@@ -273,6 +290,9 @@ let flashDuration = 30; // frames (about 0.5 seconds at 60fps)
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
 let imagesLoaded = false;
 let recycleSymbolImage = null;  // Recycling symbol image
+let greenBinImage = null;  // Green bin image
+let yellowBinImage = null;  // Yellow/Orange bin image
+let redBinImage = null;  // Red bin image
 
 // Keyboard state
 const keys = {
@@ -293,9 +313,16 @@ function initGame() {
   
   loadImages();
   loadRecycleSymbol();
+  loadGreenBinImage();
+  loadYellowBinImage();
+  loadRedBinImage();
+  
+  // Initialize new items for level 1
+  updateNewItemsForLevel();
+  
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 200; // Start below the "Recycle this [item]!" text
+  itemY = 180; // Start below the "Recycle this [item]!" text
   setupBins();
   
   // Check if this is first time playing (tutorial)
@@ -308,6 +335,22 @@ function initGame() {
   
   // Add click handler for info button on canvas
   canvas.addEventListener('click', (e) => {
+    // Handle new items popup dismissal
+    if (showNewItemsPopup) {
+      showNewItemsPopup = false;
+      return;
+    }
+    
+    // Handle hints off popup dismissal
+    if (showHintsOffPopup) {
+      showHintsOffPopup = false;
+      // Turn off hints after popup is dismissed
+      if (level >= 4) {
+        showHints = false;
+      }
+      return;
+    }
+    
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -475,7 +518,7 @@ function processTutorialAction(step) {
       currentItem = item;
       updateCurrentItemImage();
       itemX = canvas.width / 2 - itemWidth / 2;
-      itemY = 200;
+      itemY = 180;
       phase = "category";
       setupBins();
     }
@@ -486,7 +529,7 @@ function processTutorialAction(step) {
       currentItem = item;
       updateCurrentItemImage();
       itemX = canvas.width / 2 - itemWidth / 2;
-      itemY = 200;
+      itemY = 180;
       phase = "code";
       codePhaseCategory = item.category; // Set to green since water bottle is green
       setupBins();
@@ -532,7 +575,7 @@ function endTutorial() {
   // Reset to normal game state
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 200;
+  itemY = 180;
   phase = "category";
   setupBins();
 }
@@ -546,6 +589,40 @@ function loadRecycleSymbol() {
   };
   img.onerror = () => {
     console.log('Recycle symbol image not found');
+  };
+}
+
+// Load green bin image
+function loadGreenBinImage() {
+  const img = new Image();
+  img.src = 'images/green.png';
+  img.onload = () => {
+    greenBinImage = img;
+  };
+  img.onerror = () => {
+    console.log('Green bin image not found');
+  };
+}
+
+function loadYellowBinImage() {
+  const img = new Image();
+  img.src = 'images/yellow.png';
+  img.onload = () => {
+    yellowBinImage = img;
+  };
+  img.onerror = () => {
+    console.log('Yellow bin image not found');
+  };
+}
+
+function loadRedBinImage() {
+  const img = new Image();
+  img.src = 'images/red.png';
+  img.onload = () => {
+    redBinImage = img;
+  };
+  img.onerror = () => {
+    console.log('Red bin image not found');
   };
 }
 
@@ -655,6 +732,49 @@ function loadImages() {
           }
         };
       }
+    } else if (item.name === "Soda bottle") {
+      const variants = [];
+      let variantsLoaded = 0;
+      const totalVariants = 3;
+      
+      for (let i = 1; i <= totalVariants; i++) {
+        const img = new Image();
+        img.src = `images/${imageName}-${i}.png`;
+        
+        img.onload = () => {
+          variants.push(img);
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            itemImages[item.name] = variants;
+            itemsProcessed++;
+            // Update current item image if this is the current item
+            if (currentItem && currentItem.name === item.name) {
+              updateCurrentItemImage();
+            }
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+        
+        img.onerror = () => {
+          variantsLoaded++;
+          if (variantsLoaded === totalVariants) {
+            // If no variants loaded, use fallback
+            if (variants.length > 0) {
+              itemImages[item.name] = variants;
+              // Update current item image if this is the current item
+              if (currentItem && currentItem.name === item.name) {
+                updateCurrentItemImage();
+              }
+            }
+            itemsProcessed++;
+            if (itemsProcessed === totalItems) {
+              imagesLoaded = true;
+            }
+          }
+        };
+      }
     } else {
       // Regular single image loading
       const img = new Image();
@@ -702,12 +822,55 @@ function updateCurrentItemImage() {
   }
 }
 
+// Get available items for current level
+function getAvailableItemsForLevel(currentLevel) {
+  const availableItems = [];
+  
+  // Add items from all levels up to and including current level
+  for (let l = 1; l <= currentLevel; l++) {
+    if (ITEMS_BY_LEVEL[l]) {
+      ITEMS_BY_LEVEL[l].forEach(itemName => {
+        const item = ITEMS.find(i => i.name === itemName);
+        if (item) {
+          availableItems.push(item);
+        }
+      });
+    }
+  }
+  
+  return availableItems;
+}
+
 function pickRandomItem() {
-  const randomIndex = Math.floor(Math.random() * ITEMS.length);
-  currentItem = ITEMS[randomIndex];
+  // Get available items for current level
+  const availableItems = getAvailableItemsForLevel(level);
+  
+  if (availableItems.length === 0) {
+    // Fallback to all items if something goes wrong
+    const randomIndex = Math.floor(Math.random() * ITEMS.length);
+    currentItem = ITEMS[randomIndex];
+  } else {
+    // Create weighted array: new items get 2x weight
+    const weightedItems = [];
+    availableItems.forEach(item => {
+      const isNewItem = newItemsForCurrentLevel.includes(item.name);
+      // New items appear twice in the array (2x weight)
+      weightedItems.push(item);
+      if (isNewItem) {
+        weightedItems.push(item);  // Add again for 2x weight
+      }
+    });
+    
+    // Pick random item from weighted array
+    const randomIndex = Math.floor(Math.random() * weightedItems.length);
+    currentItem = weightedItems[randomIndex];
+  }
   
   // Try to select image variant for this item
   updateCurrentItemImage();
+  
+  // Reset attempts for new item
+  itemAttempts = 0;
   
   // Show educational message when new item appears
   showEducationalContent();
@@ -725,7 +888,7 @@ function setupBins() {
   bins = [];
   const binWidth = 180;
   const binHeight = 100;
-  const binY = canvas.height - binHeight - 40;
+  const binY = canvas.height - binHeight - 72;
   const spacing = (canvas.width - (binWidth * 3)) / 4;
   
   if (phase === "category") {
@@ -873,6 +1036,24 @@ function dropIntoBinBelow() {
 // INPUT HANDLING
 // ============================================================================
 window.addEventListener("keydown", (e) => {
+  // Handle new items popup dismissal
+  if (showNewItemsPopup) {
+    e.preventDefault();
+    showNewItemsPopup = false;
+    return;
+  }
+  
+  // Handle hints off popup dismissal
+  if (showHintsOffPopup) {
+    e.preventDefault();
+    showHintsOffPopup = false;
+    // Turn off hints after popup is dismissed
+    if (level >= 4) {
+      showHints = false;
+    }
+    return;
+  }
+  
   // Handle tutorial navigation (but allow gameplay controls during interactive demo)
   if (tutorialActive) {
     const currentStep = tutorialSteps[tutorialStep];
@@ -979,6 +1160,11 @@ window.addEventListener("keyup", (e) => {
 // GAME LOGIC
 // ============================================================================
 function update() {
+  // Pause game when hints off popup or new items popup is shown
+  if (showHintsOffPopup || showNewItemsPopup) {
+    return; // Don't update game logic while popup is shown
+  }
+  
   // Update timers
   if (messageTimer > 0) {
     messageTimer--;
@@ -1156,13 +1342,14 @@ function checkBinCollision() {
             codePhaseCategory = currentItem.category; // Remember which category we're sorting
             setupBins();
             itemX = canvas.width / 2 - itemWidth / 2;
-            itemY = 200; // Start below the "Recycle this [item]!" text
+            itemY = 180; // Start below the "Recycle this [item]!" text
             hasCollided = false;  // Reset collision flag for phase transition
             isTransitioning = false;  // End transition
             showEducationalContent();
           }, 2000); // Reduced delay for smoother transition
         } else {
           // Wrong bin - teach them!
+          itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = CATEGORY_INFO[currentItem.category];
           const wrongInfo = bin.info;
           message = `Oops! Try again!`;
@@ -1208,7 +1395,16 @@ function checkBinCollision() {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           score++;
-          checkLevelProgression();
+          
+          // Only count level progression if this is the first try
+          if (itemAttempts === 0) {
+            // Track if this is a new item that was correctly sorted
+            if (newItemsForCurrentLevel.includes(currentItem.name)) {
+              newItemsSortedThisLevel.add(currentItem.name);
+            }
+            checkLevelProgression();
+          }
+          
           message = `Awesome! You got it right!`;
           educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
           
@@ -1244,6 +1440,7 @@ function checkBinCollision() {
           hasCollided = false;  // Reset collision flag for new item
         } else {
           // Wrong code - teach them!
+          itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
           message = `Almost there! Keep trying!`;
           educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
@@ -1270,8 +1467,9 @@ function checkBinCollision() {
 
 function resetItem() {
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 200; // Start below the "Recycle this [item]!" text
+  itemY = 180; // Start below the "Recycle this [item]!" text
   hasCollided = false;  // Reset collision flag
+  // Don't reset itemAttempts here - only reset when new item is picked
 }
 
 // Add to trash pile when item is missed or incorrectly sorted
@@ -1310,9 +1508,15 @@ function restartGame() {
   itemSpeedY = baseSpeedY;
   hasCollided = false;
   isTransitioning = false;
+  itemAttempts = 0;
+  showHintsOffPopup = false;
+  hintsOffPopupTimer = 0;
+  showNewItemsPopup = false;
+  newItemsSortedThisLevel.clear();
+  updateNewItemsForLevel();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 200;
+  itemY = 180;
   setupBins();
   message = "";
   educationalMessage = "";
@@ -1320,22 +1524,45 @@ function restartGame() {
   educationalTimer = 0;
 }
 
-// Check for level progression - need n correct items to go from level n to n+1
+// Check for level progression - need n correct items AND all new items sorted correctly
 function checkLevelProgression() {
   correctItemsThisLevel++;
   
-  // To go from level n to level n+1, you need n correct items
-  if (correctItemsThisLevel >= level) {
+  // Check if all new items for current level have been sorted correctly
+  const allNewItemsSorted = newItemsForCurrentLevel.length === 0 || 
+                            newItemsForCurrentLevel.every(itemName => newItemsSortedThisLevel.has(itemName));
+  
+  // To go from level n to level n+1, you need:
+  // 1. n correct items (first try only)
+  // 2. All new items for current level sorted correctly (first try only)
+  if (correctItemsThisLevel >= level && allNewItemsSorted) {
+    const previousLevel = level;
     level++;
     correctItemsThisLevel = 0;  // Reset counter for next level
+    newItemsSortedThisLevel.clear();  // Reset new items tracking
+    
+    // Update new items for the new level
+    updateNewItemsForLevel();
+    
     message = `Level ${level}! Items fall faster now!`;
     messageTimer = messageDuration;
     
+    // Show popup for new items unlocked
+    if (newItemsForCurrentLevel.length > 0) {
+      showNewItemsPopup = true;
+    }
+    
     // Automatically turn off hints after level 4
     if (level >= 4 && showHints) {
-      showHints = false;
+      // Show popup before turning off hints (user must dismiss it)
+      showHintsOffPopup = true;
     }
   }
+}
+
+// Update new items list when level changes
+function updateNewItemsForLevel() {
+  newItemsForCurrentLevel = ITEMS_BY_LEVEL[level] || [];
 }
 
 // ============================================================================
@@ -1607,6 +1834,180 @@ function drawTutorial() {
   ctx.textAlign = "left";
 }
 
+function drawNewItemsPopup() {
+  // Draw dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Get item data for new items
+  const newItemsData = newItemsForCurrentLevel.map(itemName => {
+    return ITEMS.find(item => item.name === itemName);
+  }).filter(item => item !== undefined);
+  
+  // Calculate grid layout (2 columns)
+  const itemsPerRow = 2;
+  const rows = Math.ceil(newItemsData.length / itemsPerRow);
+  const itemImageSize = 80;
+  const itemSpacing = 20;
+  const itemPadding = 15;
+  
+  // Calculate panel dimensions
+  const panelWidth = 600;
+  const itemCellWidth = (panelWidth - (itemPadding * 2) - (itemSpacing * (itemsPerRow - 1))) / itemsPerRow;
+  const itemCellHeight = itemImageSize + 50; // Image + text space
+  const panelHeight = 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0);
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+  
+  // Draw panel background
+  ctx.fillStyle = "#FFFFFF";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  // Draw panel border
+  ctx.strokeStyle = "#4CAF50";
+  ctx.lineWidth = 4;
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.stroke();
+  
+  // Draw title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("New Items Unlocked!", panelX + panelWidth / 2, panelY + 40);
+  
+  // Draw message
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("You can now sort:", panelX + panelWidth / 2, panelY + 75);
+  
+  // Draw items in grid
+  const startX = panelX + itemPadding;
+  const startY = panelY + 105;
+  
+  newItemsData.forEach((item, index) => {
+    const row = Math.floor(index / itemsPerRow);
+    const col = index % itemsPerRow;
+    
+    const cellX = startX + col * (itemCellWidth + itemSpacing);
+    const cellY = startY + row * (itemCellHeight + itemSpacing);
+    
+    // Get item image
+    const itemImageData = itemImages[item.name];
+    let itemImage = null;
+    if (itemImageData) {
+      if (Array.isArray(itemImageData)) {
+        // Use first variant for popup
+        itemImage = itemImageData[0];
+      } else {
+        itemImage = itemImageData;
+      }
+    }
+    
+    // Draw item image
+    if (itemImage && itemImage.complete && itemImage.naturalWidth > 0) {
+      const imageX = cellX + (itemCellWidth - itemImageSize) / 2;
+      const imageY = cellY;
+      
+      // Calculate aspect ratio to fit image
+      const imgAspectRatio = itemImage.width / itemImage.height;
+      let drawWidth = itemImageSize;
+      let drawHeight = itemImageSize;
+      
+      if (imgAspectRatio > 1) {
+        // Wider than tall
+        drawHeight = itemImageSize / imgAspectRatio;
+      } else {
+        // Taller than wide
+        drawWidth = itemImageSize * imgAspectRatio;
+      }
+      
+      const drawX = imageX + (itemImageSize - drawWidth) / 2;
+      const drawY = imageY + (itemImageSize - drawHeight) / 2;
+      
+      ctx.drawImage(itemImage, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // Fallback: draw placeholder rectangle
+      ctx.fillStyle = "#E2E8F0";
+      ctx.fillRect(cellX + (itemCellWidth - itemImageSize) / 2, cellY, itemImageSize, itemImageSize);
+    }
+    
+    // Draw item name
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(item.name, cellX + itemCellWidth / 2, cellY + itemImageSize + 18);
+    
+    // Draw code number with category color
+    let codeColor = "#2D3748"; // Default
+    if (item.category === "green") {
+      codeColor = "#4CAF50";
+    } else if (item.category === "orange") {
+      codeColor = "#FF9800";
+    } else if (item.category === "red") {
+      codeColor = "#F44336";
+    }
+    
+    ctx.fillStyle = codeColor;
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`#${item.code}`, cellX + itemCellWidth / 2, cellY + itemImageSize + 38);
+  });
+  
+  // Draw "press any key to continue" text at bottom
+  ctx.fillStyle = "#718096";
+  ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Press any key to continue", panelX + panelWidth / 2, panelY + panelHeight - 20);
+  
+  ctx.textAlign = "left";
+}
+
+function drawHintsOffPopup() {
+  // Draw dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw popup panel
+  const panelWidth = 500;
+  const panelHeight = 200;
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+  
+  // Draw panel background
+  ctx.fillStyle = "#FFFFFF";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  // Draw panel border
+  ctx.strokeStyle = "#FFD700";
+  ctx.lineWidth = 4;
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.stroke();
+  
+  // Draw title
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Congratulations!", panelX + panelWidth / 2, panelY + 50);
+  
+  // Draw message
+  ctx.fillStyle = "#4A5568";
+  ctx.font = "20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("You're turning into an expert recycler!", panelX + panelWidth / 2, panelY + 90);
+  ctx.fillText("Turning off hints...", panelX + panelWidth / 2, panelY + 120);
+  
+  // Draw "press any key to continue" text at bottom
+  ctx.fillStyle = "#718096";
+  ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Press any key to continue", panelX + panelWidth / 2, panelY + panelHeight - 20);
+  
+  ctx.textAlign = "left";
+}
+
 function render() {
   // Draw sky gradient background
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -1798,6 +2199,16 @@ function render() {
     ctx.textAlign = "right";
     ctx.fillText("SPACE: toggle hints | SHIFT: speed up | ENTER: instant drop | Arrow keys: move", canvas.width - 15, canvas.height - 25);
     ctx.textAlign = "left";
+  }
+  
+  // Draw new items popup (on top of everything except tutorial)
+  if (showNewItemsPopup) {
+    drawNewItemsPopup();
+  }
+  
+  // Draw hints off popup (on top of everything except tutorial)
+  if (showHintsOffPopup) {
+    drawHintsOffPopup();
   }
   
   // Draw tutorial overlay (on top of everything)
@@ -2179,71 +2590,144 @@ function drawRecyclingSymbol(x, y, size, color) {
 }
 
 function drawBin(bin) {
-  // Create gradient for bin
-  const binGradient = ctx.createLinearGradient(bin.x, bin.y, bin.x, bin.y + bin.height);
-  let baseColor = bin.color;
+  // Determine which bin image to use (green, yellow/orange, or red)
+  const isGreenBin = (bin.category === "green") || (phase === "code" && codePhaseCategory === "green");
+  const isOrangeBin = (bin.category === "orange") || (phase === "code" && codePhaseCategory === "orange");
+  const isRedBin = (bin.category === "red") || (phase === "code" && codePhaseCategory === "red");
   
-  // Show contamination effect if green bin is contaminated
-  if (greenBinContaminated && bin.category === "green") {
-    baseColor = "#FF6B6B";  // Red tint for contamination
+  let binImage = null;
+  if (isGreenBin && greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) {
+    binImage = greenBinImage;
+  } else if (isOrangeBin && yellowBinImage && yellowBinImage.complete && yellowBinImage.naturalWidth > 0) {
+    binImage = yellowBinImage;
+  } else if (isRedBin && redBinImage && redBinImage.complete && redBinImage.naturalWidth > 0) {
+    binImage = redBinImage;
   }
   
-  binGradient.addColorStop(0, lightenColor(baseColor, 20));
-  binGradient.addColorStop(1, darkenColor(baseColor, 10));
-  
-  // Draw recycling bin shape (trapezoid - wider at top, narrower at bottom)
-  const topWidth = bin.width;
-  const bottomWidth = bin.width * 0.75; // Bottom is 75% of top width
-  const widthDiff = (topWidth - bottomWidth) / 2;
-  
-  ctx.fillStyle = binGradient;
-  ctx.beginPath();
-  ctx.moveTo(bin.x, bin.y); // Top left
-  ctx.lineTo(bin.x + topWidth, bin.y); // Top right
-  ctx.lineTo(bin.x + topWidth - widthDiff, bin.y + bin.height); // Bottom right
-  ctx.lineTo(bin.x + widthDiff, bin.y + bin.height); // Bottom left
-  ctx.closePath();
-  ctx.fill();
-  
-  // Bin border (red if contaminated)
-  ctx.strokeStyle = greenBinContaminated && bin.category === "green" ? "#FF0000" : "#FFFFFF";
-  ctx.lineWidth = greenBinContaminated && bin.category === "green" ? 6 : 4;
-  ctx.stroke();
-  
-  // Inner highlight
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(bin.x + 2, bin.y + 2);
-  ctx.lineTo(bin.x + topWidth - 2, bin.y + 2);
-  ctx.lineTo(bin.x + topWidth - widthDiff - 2, bin.y + bin.height - 2);
-  ctx.lineTo(bin.x + widthDiff + 2, bin.y + bin.height - 2);
-  ctx.closePath();
-  ctx.stroke();
+  if (binImage) {
+    // Draw bin image preserving original aspect ratio, scaled by 2x
+    ctx.save();
+    
+    // Scale image by 2x while maintaining aspect ratio
+    const imgAspectRatio = binImage.width / binImage.height;
+    const baseWidth = bin.width * 2;
+    const baseHeight = bin.height * 2;
+    
+    let drawWidth, drawHeight, drawX, drawY;
+    
+    // Calculate size maintaining aspect ratio at 2x scale
+    if (imgAspectRatio > (baseWidth / baseHeight)) {
+      // Image is wider - fit to width at 2x
+      drawWidth = baseWidth;
+      drawHeight = baseWidth / imgAspectRatio;
+    } else {
+      // Image is taller - fit to height at 2x
+      drawHeight = baseHeight;
+      drawWidth = baseHeight * imgAspectRatio;
+    }
+    
+    // Center the scaled image
+    drawX = bin.x + (bin.width - drawWidth) / 2;
+    drawY = bin.y + (bin.height - drawHeight) / 2;
+    
+    // Apply contamination tint if contaminated (only for green bin)
+    if (greenBinContaminated && isGreenBin) {
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = "#FF6B6B";
+      ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    
+    // Draw the bin image at original aspect ratio
+    ctx.drawImage(binImage, drawX, drawY, drawWidth, drawHeight);
+    
+    // Draw red border if contaminated (only for green bin)
+    if (greenBinContaminated && isGreenBin) {
+      ctx.strokeStyle = "#FF0000";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(drawX, drawY, drawWidth, drawHeight);
+    }
+    
+    ctx.restore();
+  } else {
+    // Fallback to drawn bin for non-green bins or if image not loaded
+    // Create gradient for bin
+    const binGradient = ctx.createLinearGradient(bin.x, bin.y, bin.x, bin.y + bin.height);
+    let baseColor = bin.color;
+    
+    // Show contamination effect if green bin is contaminated
+    if (greenBinContaminated && bin.category === "green") {
+      baseColor = "#FF6B6B";  // Red tint for contamination
+    }
+    
+    binGradient.addColorStop(0, lightenColor(baseColor, 20));
+    binGradient.addColorStop(1, darkenColor(baseColor, 10));
+    
+    // Draw recycling bin shape (trapezoid - wider at top, narrower at bottom)
+    const topWidth = bin.width;
+    const bottomWidth = bin.width * 0.75; // Bottom is 75% of top width
+    const widthDiff = (topWidth - bottomWidth) / 2;
+    
+    ctx.fillStyle = binGradient;
+    ctx.beginPath();
+    ctx.moveTo(bin.x, bin.y); // Top left
+    ctx.lineTo(bin.x + topWidth, bin.y); // Top right
+    ctx.lineTo(bin.x + topWidth - widthDiff, bin.y + bin.height); // Bottom right
+    ctx.lineTo(bin.x + widthDiff, bin.y + bin.height); // Bottom left
+    ctx.closePath();
+    ctx.fill();
+    
+    // Bin border (red if contaminated)
+    ctx.strokeStyle = greenBinContaminated && bin.category === "green" ? "#FF0000" : "#FFFFFF";
+    ctx.lineWidth = greenBinContaminated && bin.category === "green" ? 6 : 4;
+    ctx.stroke();
+    
+    // Inner highlight
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(bin.x + 2, bin.y + 2);
+    ctx.lineTo(bin.x + topWidth - 2, bin.y + 2);
+    ctx.lineTo(bin.x + topWidth - widthDiff - 2, bin.y + bin.height - 2);
+    ctx.lineTo(bin.x + widthDiff + 2, bin.y + bin.height - 2);
+    ctx.closePath();
+    ctx.stroke();
+  }
   
   // Draw bin content - symbol and numbers/icons together
   const centerX = bin.x + bin.width / 2;
   
   if (phase === "category") {
-    // Draw recycling symbol image in the center
-    if (recycleSymbolImage) {
-      const symbolSize = 40;
-      const symbolX = centerX - symbolSize / 2;
-      const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
-      ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
-    } else {
-      // Fallback to drawn symbol if image not loaded
-      drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
+    // Draw recycling symbol image in the center (skip for bins using images)
+    const usingBinImage = (isGreenBin && greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) ||
+                          (isOrangeBin && yellowBinImage && yellowBinImage.complete && yellowBinImage.naturalWidth > 0) ||
+                          (isRedBin && redBinImage && redBinImage.complete && redBinImage.naturalWidth > 0);
+    
+    if (!usingBinImage) {
+      if (recycleSymbolImage) {
+        const symbolSize = 40;
+        const symbolX = centerX - symbolSize / 2;
+        const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
+        ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
+      } else {
+        // Fallback to drawn symbol if image not loaded
+        drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
+      }
     }
     
-    // Show numbers/icons at the top (always visible, more bin-like)
+    // Show numbers/icons at the bottom (step 1)
     if (bin.info) {
       const codesMatch = bin.info.codes.match(/#\d+/g);
-      const codesText = codesMatch ? codesMatch.join(", ") : "";
+      // Remove "#" symbol from numbers (e.g., "#1, #2" -> "1, 2")
+      const codesText = codesMatch ? codesMatch.map(code => code.replace("#", "")).join(", ") : "";
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
       ctx.textAlign = "center";
-      ctx.fillText(codesText, centerX, bin.y + 18);
+      // Position at bottom, but leave space for contamination warning if needed
+      const bottomY = greenBinContaminated && bin.category === "green" 
+        ? bin.y + bin.height - 5 
+        : bin.y + bin.height + 12;
+      ctx.fillText(codesText, centerX, bottomY);
     }
     
     // Show contamination warning if contaminated
@@ -2253,18 +2737,43 @@ function drawBin(bin) {
       ctx.fillText("CONTAMINATED!", centerX, bin.y + bin.height - 8);
     }
   } else {
-    // Code phase: show label (with number) at top, symbol in center
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 22px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(bin.label, centerX, bin.y + 20);
+    // Code phase: show symbol in center, type at bottom
+    // Remove number from label (e.g., "#1 PET" -> "PET")
+    const labelWithoutNumber = bin.label.replace(/^#\d+\s+/, "");
     
-    // Draw recycling symbol in center
-    if (recycleSymbolImage) {
+    // Draw recycling symbol in center (skip for bins using images)
+    const usingBinImage = (isGreenBin && greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) ||
+                          (isOrangeBin && yellowBinImage && yellowBinImage.complete && yellowBinImage.naturalWidth > 0) ||
+                          (isRedBin && redBinImage && redBinImage.complete && redBinImage.naturalWidth > 0);
+    
+    if (!usingBinImage && recycleSymbolImage) {
       const symbolSize = 35;
       const symbolX = centerX - symbolSize / 2;
       const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
       ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
+    }
+    
+    // Draw number in the center (always show in code phase)
+    if (bin.code !== undefined) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      // Adjust horizontal position for different numbers
+      let numberX = centerX;
+      if (bin.code === 1 || bin.code === 2 || bin.code === 6 || bin.code === 7) {
+        numberX = centerX + 2;
+      } else if (bin.code === 3 || bin.code === 5) {
+        numberX = centerX + 1;
+      }
+      ctx.fillText(bin.code.toString(), numberX, bin.y + bin.height / 2 + 20);
+    }
+    
+    // Draw type at the bottom (step 2)
+    if (bin.code !== undefined) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(labelWithoutNumber, centerX, bin.y + bin.height + 12);
     }
   }
   
