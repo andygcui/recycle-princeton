@@ -132,6 +132,7 @@ let gameOver = false;
 let gameOverMessage = "";
 let gamePaused = false;  // Pause state
 let showHand = false;  // Show hand image (starts hidden)
+let soundEnabled = false;  // Sound effects enabled (starts off)
 
 // Level-based item unlocking
 const ITEMS_BY_LEVEL = {
@@ -1300,9 +1301,9 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (e.key === "h" || e.key === "H") {
-    // Toggle hand visibility
+    // Toggle sound effects
     e.preventDefault();
-    showHand = !showHand;
+    soundEnabled = !soundEnabled;
   }
   if (e.key === "t" || e.key === "T") {
     // Restart tutorial (for testing/debugging)
@@ -1535,7 +1536,7 @@ function checkBinCollision() {
           educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
           // Play correct sound
-          if (correctSound) {
+          if (soundEnabled && correctSound) {
             correctSound.currentTime = 0; // Reset to start
             correctSound.play().catch(err => console.log('Could not play correct sound:', err));
           }
@@ -1592,7 +1593,7 @@ function checkBinCollision() {
           educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
           
           // Play incorrect sound
-          if (incorrectSound) {
+          if (soundEnabled && incorrectSound) {
             incorrectSound.currentTime = 0; // Reset to start
             incorrectSound.play().catch(err => console.log('Could not play incorrect sound:', err));
           }
@@ -1670,7 +1671,7 @@ function checkBinCollision() {
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           
           // Play correct sound
-          if (correctSound) {
+          if (soundEnabled && correctSound) {
             correctSound.currentTime = 0; // Reset to start
             correctSound.play().catch(err => console.log('Could not play correct sound:', err));
           }
@@ -1738,7 +1739,7 @@ function checkBinCollision() {
           educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
           
           // Play incorrect sound
-          if (incorrectSound) {
+          if (soundEnabled && incorrectSound) {
             incorrectSound.currentTime = 0; // Reset to start
             incorrectSound.play().catch(err => console.log('Could not play incorrect sound:', err));
           }
