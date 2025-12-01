@@ -131,6 +131,7 @@ let baseSpeedY = 0.5;  // Base falling speed
 let gameOver = false;
 let gameOverMessage = "";
 let gamePaused = false;  // Pause state
+let showHand = false;  // Show hand image (starts hidden)
 
 // Level-based item unlocking
 const ITEMS_BY_LEVEL = {
@@ -336,6 +337,7 @@ function initGame() {
   loadYellowBinImage();
   loadRedBinImage();
   loadStopImage();
+  loadHandImage();
   
   // Initialize new items for level 1
   updateNewItemsForLevel();
@@ -706,6 +708,17 @@ function loadStopImage() {
   };
   img.onerror = () => {
     console.log('Stop image not found');
+  };
+}
+
+function loadHandImage() {
+  const img = new Image();
+  img.src = 'images/hand.png';
+  img.onload = () => {
+    handImage = img;
+  };
+  img.onerror = () => {
+    console.log('Hand image not found');
   };
 }
 
@@ -1256,11 +1269,16 @@ window.addEventListener("keydown", (e) => {
     showPvP = false;  // Close PvP if open
   }
   if (e.key === "x" || e.key === "X") {
-    // Toggle hints (only if not in tutorial, popups, or decontamination game)
+    // Toggle hints (only if not in tutorial, popups, popups, or decontamination game)
     if (!tutorialActive && !showHintsOffPopup && !showNewItemsPopup && !showContaminationPopup && !showHelpPanel && !decontaminationActive && !gameOver) {
       e.preventDefault();
       showHints = !showHints;
     }
+  }
+  if (e.key === "h" || e.key === "H") {
+    // Toggle hand visibility
+    e.preventDefault();
+    showHand = !showHand;
   }
   if (e.key === "t" || e.key === "T") {
     // Restart tutorial (for testing/debugging)
@@ -2950,6 +2968,15 @@ function render() {
   // Draw fake PvP if shown
   if (showPvP) {
     drawFakePvP();
+  }
+  
+  // Draw hand image (only during normal gameplay and if visible)
+  if (showHand && handImage && handImage.complete && handImage.naturalWidth > 0 && !tutorialActive && !gameOver && !decontaminationActive) {
+    const handWidth = 600;
+    const handHeight = 600;
+    const handX = -10; // Temporary position - user will move it later
+    const handY = -100;
+    ctx.drawImage(handImage, handX, handY, handWidth, handHeight);
   }
   
   // Draw pause overlay
