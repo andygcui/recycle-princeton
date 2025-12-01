@@ -313,6 +313,8 @@ let yellowBinImage = null;  // Yellow/Orange bin image
 let redBinImage = null;  // Red bin image
 let stopImage = null;  // Stop sign image for contamination indicator
 let handImage = null;  // Hand image
+let correctSound = null;  // Correct sound effect
+let incorrectSound = null;  // Incorrect sound effect
 
 // Keyboard state
 const keys = {
@@ -338,6 +340,8 @@ function initGame() {
   loadRedBinImage();
   loadStopImage();
   loadHandImage();
+  loadCorrectSound();
+  loadIncorrectSound();
   
   // Initialize new items for level 1
   updateNewItemsForLevel();
@@ -719,6 +723,26 @@ function loadHandImage() {
   };
   img.onerror = () => {
     console.log('Hand image not found');
+  };
+}
+
+function loadCorrectSound() {
+  const audio = new Audio('images/correct.mp3');
+  audio.preload = 'auto';
+  audio.volume = 0.3; // Set volume to 30% (softer)
+  correctSound = audio;
+  audio.onerror = () => {
+    console.log('Correct sound not found');
+  };
+}
+
+function loadIncorrectSound() {
+  const audio = new Audio('images/incorrect.mp3');
+  audio.preload = 'auto';
+  audio.volume = 0.5; // Set volume to 50% (louder than correct)
+  incorrectSound = audio;
+  audio.onerror = () => {
+    console.log('Incorrect sound not found');
   };
 }
 
@@ -1510,6 +1534,12 @@ function checkBinCollision() {
           // Remove text message, keep educational message
           educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
+          // Play correct sound
+          if (correctSound) {
+            correctSound.currentTime = 0; // Reset to start
+            correctSound.play().catch(err => console.log('Could not play correct sound:', err));
+          }
+          
           // Flash green for correct answer
           flashColor = "green";
           flashTimer = flashDuration;
@@ -1560,6 +1590,12 @@ function checkBinCollision() {
           const wrongInfo = bin.info;
           // Remove text message, keep educational message
           educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
+          
+          // Play incorrect sound
+          if (incorrectSound) {
+            incorrectSound.currentTime = 0; // Reset to start
+            incorrectSound.play().catch(err => console.log('Could not play incorrect sound:', err));
+          }
           
           // Flash red for incorrect answer
           flashColor = "red";
@@ -1633,6 +1669,12 @@ function checkBinCollision() {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
           
+          // Play correct sound
+          if (correctSound) {
+            correctSound.currentTime = 0; // Reset to start
+            correctSound.play().catch(err => console.log('Could not play correct sound:', err));
+          }
+          
           // Don't count score/level progression during tutorial
           if (!tutorialActive) {
           score++;
@@ -1694,6 +1736,12 @@ function checkBinCollision() {
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
           // Remove text message, keep educational message
           educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
+          
+          // Play incorrect sound
+          if (incorrectSound) {
+            incorrectSound.currentTime = 0; // Reset to start
+            incorrectSound.play().catch(err => console.log('Could not play incorrect sound:', err));
+          }
           
           // Flash red for incorrect answer
           flashColor = "red";
