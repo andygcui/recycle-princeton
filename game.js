@@ -160,6 +160,8 @@ let contaminationCount = 0;  // Track number of contaminations
 let contaminationAlertTimer = 0;  // Timer for showing contamination alert
 const contaminationAlertDuration = 180;  // frames to show alert
 let contaminationAlertMessage = "";  // Contamination alert message
+let hasSeenContaminationPopup = false;  // Track if user has seen contamination explanation popup
+let showContaminationPopup = false;  // Show contamination popup on first contamination
 
 // Fake leaderboard and PvP
 let showLeaderboard = false;
@@ -201,13 +203,13 @@ const tutorialSteps = [
   },
   {
     title: "The Falling Item",
-    text: "Items will fall from the top. Your job is to sort them into the correct bin!",
-    highlight: { type: "item", x: canvas.width / 2 - 75, y: 200, width: 150, height: 120 },
+    text: "Items will fall from the top. Your goal is to sort them into the correct bin!",
+    highlight: { type: "item", x: canvas.width / 2 - 75, y: 175, width: 150, height: 120 },
     action: null
   },
   {
     title: "Try It: Water Bottle",
-    text: "Let's practice! A water bottle is made from PET plastic, which is code #1.\n\nPlastic code #1 (PET) goes in the GREEN bin because it's widely recyclable in Princeton!",
+    text: "Let's practice! A water bottle is made from PET (polyethylene terephthalate).\n\nPET, plastic type #1, goes in the GREEN bin because it's widely recyclable in Princeton!",
     highlight: null,
     action: "setItem",
     itemName: "Water bottle",
@@ -225,7 +227,7 @@ const tutorialSteps = [
   },
   {
     title: "Try It: Choose the Code",
-    text: "Now choose the specific plastic code! The water bottle is PET, which is code #1.\n\nPut it in the #1 bin!",
+    text: "Now choose the specific plastic code! The water bottle is made from PET plastic, which is plastic type #1.\n\nPut it in the #1 bin!",
     highlight: null,
     action: "setItemCodePhase",
     itemName: "Water bottle",
@@ -234,12 +236,6 @@ const tutorialSteps = [
       { title: "Try It: Choose the Code", text: "Now choose the specific plastic code! The water bottle is PET, which is code #1.\n\nPut it in the #1 bin!" },
       { title: "Ready?", text: "Use the arrow keys to move the water bottle into the #1 bin!\n\nTry it now!" }
     ]
-  },
-  {
-    title: "Why Contamination Matters",
-    text: "Putting the wrong item in a bin causes CONTAMINATION! This ruins entire batches of recyclables and wastes everyone's effort. Always check the plastic code number!",
-    highlight: null,
-    action: null
   },
   {
     title: "Green Bin = Curbside Pickup",
@@ -262,12 +258,6 @@ const tutorialSteps = [
   {
     title: "Controls",
     text: "Use ARROW KEYS to move items left and right.\nPress ENTER to drop instantly.\nPress SHIFT to speed up.\nPress SPACE to toggle hints.",
-    highlight: null,
-    action: null
-  },
-  {
-    title: "You're Ready!",
-    text: "Now you know how to play! Remember:\n• Check the plastic code number\n• Choose the right color bin first\n• Then choose the right number bin\n• Avoid contamination!\n\nClick 'Start Playing' to begin!",
     highlight: null,
     action: null
   }
@@ -362,6 +352,12 @@ function initGame() {
       if (level >= 4) {
         showHints = false;
       }
+      return;
+    }
+    
+    // Handle contamination popup dismissal
+    if (showContaminationPopup) {
+      showContaminationPopup = false;
       return;
     }
     
@@ -1072,6 +1068,13 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   
+  // Handle contamination popup dismissal
+  if (showContaminationPopup) {
+    e.preventDefault();
+    showContaminationPopup = false;
+    return;
+  }
+  
   // Handle tutorial navigation (but allow gameplay controls during interactive demo)
   if (tutorialActive) {
     const currentStep = tutorialSteps[tutorialStep];
@@ -1178,8 +1181,8 @@ window.addEventListener("keyup", (e) => {
 // GAME LOGIC
 // ============================================================================
 function update() {
-  // Pause game when hints off popup or new items popup is shown
-  if (showHintsOffPopup || showNewItemsPopup) {
+  // Pause game when hints off popup, new items popup, or contamination popup is shown
+  if (showHintsOffPopup || showNewItemsPopup || showContaminationPopup) {
     return; // Don't update game logic while popup is shown
   }
   
@@ -1379,6 +1382,20 @@ function checkBinCollision() {
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
+          // Don't count score/level progression during tutorial
+          if (!tutorialActive) {
+            score++;
+            
+            // Only count level progression if this is the first try
+            if (itemAttempts === 0) {
+              // Track if this is a new item that was correctly sorted
+              if (newItemsForCurrentLevel.includes(currentItem.name)) {
+                newItemsSortedThisLevel.add(currentItem.name);
+              }
+              checkLevelProgression();
+            }
+          }
+          
           // Set transition flag to prevent updates
           isTransitioning = true;
           
@@ -1413,19 +1430,34 @@ function checkBinCollision() {
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
-            // Check for contamination: non-green items entering green bin
-            if (currentItem.category !== "green" && bin.category === "green") {
+            // Check for contamination: non-green items entering green bin, or red items entering orange/yellow bin
+            const isContamination = (currentItem.category !== "green" && bin.category === "green") ||
+                                   (currentItem.category === "red" && bin.category === "orange");
+            
+            if (isContamination) {
               contaminationCount++;
-              greenBinContaminated = true;
-              contaminationTimer = contaminationDuration;
+              if (bin.category === "green") {
+                greenBinContaminated = true;
+                contaminationTimer = contaminationDuration;
+              }
               contaminationAlertMessage = "CONTAMINATION ALERT!";
               contaminationAlertTimer = contaminationAlertDuration;
+              
+              // Show contamination popup on first contamination
+              if (!hasSeenContaminationPopup) {
+                hasSeenContaminationPopup = true;
+                // Wait for animations to finish before showing popup
+                const bounceDelayMs = (binBounceDuration / 60) * 1000;
+                setTimeout(() => {
+                  showContaminationPopup = true;
+                }, bounceDelayMs);
+              }
               
               // End game after 3 contaminations
               if (contaminationCount >= 3) {
                 setTimeout(() => {
                   endGame(false);
-                  gameOverMessage = "Game Over!\nThe green bin is too contaminated.";
+                  gameOverMessage = "Game Over!\nThe bin is too contaminated.";
                 }, 1000);
               }
               // Don't add to trash pile for contamination
@@ -1446,15 +1478,19 @@ function checkBinCollision() {
         if (bin.code === currentItem.code) {
           // Correct code!
           const codeInfo = PLASTIC_CODE_INFO[currentItem.code];
-          score++;
           
-          // Only count level progression if this is the first try
-          if (itemAttempts === 0) {
-            // Track if this is a new item that was correctly sorted
-            if (newItemsForCurrentLevel.includes(currentItem.name)) {
-              newItemsSortedThisLevel.add(currentItem.name);
+          // Don't count score/level progression during tutorial
+          if (!tutorialActive) {
+            score++;
+            
+            // Only count level progression if this is the first try
+            if (itemAttempts === 0) {
+              // Track if this is a new item that was correctly sorted
+              if (newItemsForCurrentLevel.includes(currentItem.name)) {
+                newItemsSortedThisLevel.add(currentItem.name);
+              }
+              checkLevelProgression();
             }
-            checkLevelProgression();
           }
           
           // Remove text message, keep educational message
@@ -1577,6 +1613,7 @@ function restartGame() {
   showHintsOffPopup = false;
   hintsOffPopupTimer = 0;
   showNewItemsPopup = false;
+  showContaminationPopup = false;  // Reset contamination popup (but keep hasSeenContaminationPopup)
   newItemsSortedThisLevel.clear();
   binBounceTimer = 0;
   bouncingBinIndex = -1;
@@ -1689,10 +1726,10 @@ function drawTutorial() {
   if (step.highlight) {
     if (step.highlight.type === "bin" && bins.length > step.highlight.binIndex) {
       const bin = bins[step.highlight.binIndex];
-      highlightX = bin.x - 5;
-      highlightY = bin.y - 5;
-      highlightWidth = bin.width + 10;
-      highlightHeight = bin.height + 10;
+      highlightX = bin.x + 16;  // 1px to the left (was +17, now +16)
+      highlightY = bin.y - 57;  // 3px down (was -60, now -57)
+      highlightWidth = bin.width - 27;  // 3px thinner on right side (unchanged)
+      highlightHeight = bin.height + 110;  // 5px taller on bottom (was +105, now +110)
       highlightRadius = 10;
     } else if (step.highlight.type === "item") {
       // Use actual item position if available
@@ -1719,7 +1756,7 @@ function drawTutorial() {
         const firstBin = bins[0];
         const lastBin = bins[bins.length - 1];
         highlightX = -5;
-        highlightY = firstBin.y - 15; // Start a bit above the bins
+        highlightY = firstBin.y - 80; // 20px taller on top (was -60, now -80)
         highlightWidth = canvas.width + 10;
         highlightHeight = (canvas.height - highlightY) + 5; // Extend to bottom of canvas
         highlightRadius = 10;
@@ -1767,7 +1804,7 @@ function drawTutorial() {
   const panelWidth = isInteractive ? 700 : 600;
   const panelHeight = isInteractive ? ((isReadyStep || isExplanationStep) ? 300 : 120) : 300;
   const panelX = (canvas.width - panelWidth) / 2;
-  const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
+  const panelY = isInteractive ? (canvas.height - panelHeight) / 2 : (step.highlight && step.highlight.y < canvas.height / 2 
     ? canvas.height - panelHeight - 30 
     : 50);
   
@@ -1810,30 +1847,17 @@ function drawTutorial() {
     const buttonWidth = 120;
     
     // Skip button (top right) - smaller X button on first slide
-    if (isFirstStep) {
-      // Small X button for first slide
-      const skipBtnSize = 30;
-      const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
-      const skipBtnY = panelY + 15;
-      ctx.fillStyle = "#F44336";
-      roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
-      ctx.fill();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("×", skipBtnX + skipBtnSize / 2, skipBtnY + skipBtnSize / 2 + 6);
-    } else {
-      // Full skip button for other slides
-      const skipBtnX = panelX + panelWidth - buttonWidth - 20;
-      const skipBtnY = panelY + 10;
-      ctx.fillStyle = "#F44336";
-      roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 8);
-      ctx.fill();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("Skip Tutorial", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 5);
-    }
+    // Skip button - always use X button
+    const skipBtnSize = 30;
+    const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
+    const skipBtnY = panelY + 15;
+    ctx.fillStyle = "#F44336";
+    roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("×", skipBtnX + skipBtnSize / 2, skipBtnY + skipBtnSize / 2 + 6);
     
     // Previous button (bottom left)
     const buttonY = panelY + panelHeight - buttonHeight - 15;
@@ -1846,13 +1870,13 @@ function drawTutorial() {
       ctx.fillText("Previous", prevBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
     }
     
-    // Next button (bottom right)
+    // Next button (bottom right) - green "Play" button on last step
     const nextBtnX = panelX + panelWidth - buttonWidth - 20;
     ctx.fillStyle = tutorialStep === tutorialSteps.length - 1 ? "#4CAF50" : "#2196F3";
     roundedRect(nextBtnX, buttonY, buttonWidth, buttonHeight, 8);
     ctx.fill();
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(tutorialStep === tutorialSteps.length - 1 ? "Start Playing" : "Next", nextBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
+    ctx.fillText(tutorialStep === tutorialSteps.length - 1 ? "Play" : "Next", nextBtnX + buttonWidth / 2, buttonY + buttonHeight / 2 + 5);
     
     // Step indicator (at the very bottom)
     ctx.fillStyle = "#999";
@@ -1864,16 +1888,17 @@ function drawTutorial() {
     const buttonHeight = 35;
     const buttonWidth = 120;
     
-    // Skip button at top right
-    const skipBtnX = panelX + panelWidth - buttonWidth - 20;
-    const skipBtnY = panelY + 10;
+    // Skip button at top right - always use X button
+    const skipBtnSize = 30;
+    const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
+    const skipBtnY = panelY + 15;
     ctx.fillStyle = "#F44336";
-    roundedRect(skipBtnX, skipBtnY, buttonWidth, buttonHeight, 8);
+    roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
     ctx.fill();
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Skip Tutorial", skipBtnX + buttonWidth / 2, skipBtnY + buttonHeight / 2 + 5);
+    ctx.fillText("×", skipBtnX + skipBtnSize / 2, skipBtnY + skipBtnSize / 2 + 6);
     
     // Show "Try It Now" and "Previous" buttons on substep 0 (explanation)
     if (currentSubStep && tutorialSubStep === 0 && step.substeps) {
@@ -1923,15 +1948,15 @@ function drawNewItemsPopup() {
     return ITEMS.find(item => item.name === itemName);
   }).filter(item => item !== undefined);
   
-  // Calculate grid layout (2 columns)
+  // Check if this is level 4+ with hints being turned off (merged popup)
+  const isMergedPopup = (level >= 4 && showHints);
+  
+  // Calculate grid layout (2 columns) - only if there are new items
   const itemsPerRow = 2;
-  const rows = Math.ceil(newItemsData.length / itemsPerRow);
+  const rows = newItemsData.length > 0 ? Math.ceil(newItemsData.length / itemsPerRow) : 0;
   const itemImageSize = 80;
   const itemSpacing = 20;
   const itemPadding = 15;
-  
-  // Check if this is level 4+ with hints being turned off (merged popup)
-  const isMergedPopup = (level >= 4 && showHints);
   
   // Calculate panel dimensions
   const panelWidth = 600;
@@ -1939,7 +1964,10 @@ function drawNewItemsPopup() {
   const itemCellHeight = itemImageSize + 50; // Image + text space
   // Add extra height if merged popup (for hints-off message)
   const extraHeight = isMergedPopup ? 60 : 0;
-  const panelHeight = 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + extraHeight;
+  // Base height: title + message + items grid (if any) + hints message (if merged) + continue text
+  const baseHeight = 120;
+  const itemsHeight = rows > 0 ? (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) : 0;
+  const panelHeight = baseHeight + itemsHeight + extraHeight;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   
@@ -1949,7 +1977,7 @@ function drawNewItemsPopup() {
   ctx.fill();
   
   // Draw panel border
-  ctx.strokeStyle = "#4CAF50";
+  ctx.strokeStyle = isMergedPopup ? "#FFD700" : "#4CAF50";
   ctx.lineWidth = 4;
   roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
   ctx.stroke();
@@ -1958,13 +1986,20 @@ function drawNewItemsPopup() {
   ctx.fillStyle = "#2D3748";
   ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText("New Items Unlocked!", panelX + panelWidth / 2, panelY + 40);
+  if (isMergedPopup && newItemsData.length === 0) {
+    // Level 4+ but no new items - just show congratulations
+    ctx.fillText("Congratulations!", panelX + panelWidth / 2, panelY + 40);
+  } else {
+    ctx.fillText("New Items Unlocked!", panelX + panelWidth / 2, panelY + 40);
+  }
   
-  // Draw message
-  ctx.fillStyle = "#4A5568";
-  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("You can now sort:", panelX + panelWidth / 2, panelY + 75);
+  // Draw message (only if there are new items)
+  if (newItemsData.length > 0) {
+    ctx.fillStyle = "#4A5568";
+    ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("You can now sort:", panelX + panelWidth / 2, panelY + 75);
+  }
   
   // Draw items in grid
   const startX = panelX + itemPadding;
@@ -2041,12 +2076,13 @@ function drawNewItemsPopup() {
   
   // Draw hints-off message if merged popup (level 4+)
   if (isMergedPopup) {
-    const messageY = panelY + 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + 10;
+    // Position message after items (or after title if no items)
+    const itemsHeight = rows > 0 ? (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) : 0;
+    const messageY = panelY + (newItemsData.length > 0 ? 120 + itemsHeight + 10 : 80);
     ctx.fillStyle = "#4A5568";
     ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
     ctx.textAlign = "center";
-    ctx.fillText("You're turning into an expert recycler!", panelX + panelWidth / 2, messageY);
-    ctx.fillText("Turning off hints...", panelX + panelWidth / 2, messageY + 25);
+    ctx.fillText("You're turning into an expert recycler! Turning off hints....", panelX + panelWidth / 2, messageY);
   }
   
   // Draw "press any key to continue" text at bottom
@@ -2303,6 +2339,11 @@ function render() {
   // Draw hints off popup (on top of everything except tutorial)
   if (showHintsOffPopup) {
     drawHintsOffPopup();
+  }
+  
+  // Draw contamination popup (on top of everything except tutorial)
+  if (showContaminationPopup) {
+    drawContaminationPopup();
   }
   
   // Draw tutorial overlay (on top of everything)
