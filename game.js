@@ -286,6 +286,16 @@ let flashColor = null;  // null, "green", or "red"
 let flashTimer = 0;
 let flashDuration = 30; // frames (about 0.5 seconds at 60fps)
 
+// Animation effects for feedback
+let binBounceTimer = 0;  // Timer for bin bounce animation (correct answer)
+let binBounceDuration = 40; // frames
+let bouncingBinIndex = -1;  // Index of the bin that should bounce (-1 = none)
+let binShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
+let binShakeDuration = 30; // frames
+let screenShakeTimer = 0;  // Timer for screen shake (incorrect answer)
+let screenShakeDuration = 20; // frames
+let screenShakeIntensity = 0;  // Current shake intensity
+
 // Image loading
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
 let imagesLoaded = false;
@@ -338,6 +348,10 @@ function initGame() {
     // Handle new items popup dismissal
     if (showNewItemsPopup) {
       showNewItemsPopup = false;
+      // If this was a merged popup (level 4+), turn off hints
+      if (level >= 4 && showHints) {
+        showHints = false;
+      }
       return;
     }
     
@@ -1040,6 +1054,10 @@ window.addEventListener("keydown", (e) => {
   if (showNewItemsPopup) {
     e.preventDefault();
     showNewItemsPopup = false;
+    // If this was a merged popup (level 4+), turn off hints
+    if (level >= 4 && showHints) {
+      showHints = false;
+    }
     return;
   }
   
@@ -1184,6 +1202,28 @@ function update() {
     }
   }
   
+  // Update bin bounce animation (correct answer)
+  if (binBounceTimer > 0) {
+    binBounceTimer--;
+    if (binBounceTimer === 0) {
+      bouncingBinIndex = -1; // Reset when animation ends
+    }
+  }
+  
+  // Update bin shake animation (incorrect answer)
+  if (binShakeTimer > 0) {
+    binShakeTimer--;
+  }
+  
+  // Update screen shake (incorrect answer)
+  if (screenShakeTimer > 0) {
+    screenShakeTimer--;
+    // Decay shake intensity
+    screenShakeIntensity = (screenShakeTimer / screenShakeDuration) * 8; // Max 8 pixels
+  } else {
+    screenShakeIntensity = 0;
+  }
+  
   // Update contamination timer
   if (contaminationTimer > 0) {
     contaminationTimer--;
@@ -1301,30 +1341,36 @@ function update() {
 function checkBinCollision() {
   const itemCenterX = itemX + itemWidth / 2;
   
-  for (const bin of bins) {
+  for (let i = 0; i < bins.length; i++) {
+    const bin = bins[i];
     if (itemCenterX >= bin.x && itemCenterX <= bin.x + bin.width) {
       if (phase === "category") {
         if (bin.category === currentItem.category) {
           // Correct category!
           const categoryInfo = CATEGORY_INFO[currentItem.category];
-          message = `Awesome! You got it right!`;
+          // Remove text message, keep educational message
           educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
           // Flash green for correct answer
           flashColor = "green";
           flashTimer = flashDuration;
           
+          // Start bin bounce animation for this specific bin
+          binBounceTimer = binBounceDuration;
+          bouncingBinIndex = i;
+          
           // Check if this is tutorial interactive step
           if (tutorialActive && tutorialStep < tutorialSteps.length) {
             const currentStep = tutorialSteps[tutorialStep];
             if (currentStep.interactive && currentItem.name === "Water bottle" && bin.category === "green" && tutorialSubStep >= 2) {
-              // Tutorial success! Advance to next tutorial step after showing success message
+              // Tutorial success! Advance to next tutorial step after bounce animation finishes
+              const bounceDelayMs = (binBounceDuration / 60) * 1000;
               setTimeout(() => {
                 nextTutorialStep();
                 resetItem();
                 phase = "category";
                 setupBins();
-              }, 2000);
+              }, bounceDelayMs);
               return;
             }
           }
@@ -1336,7 +1382,8 @@ function checkBinCollision() {
           // Set transition flag to prevent updates
           isTransitioning = true;
           
-          // Let item continue falling into bin, then transition after it's fully in
+          // Wait for bin bounce animation to finish before transitioning to code phase
+          const bounceDelayMs = (binBounceDuration / 60) * 1000;
           setTimeout(() => {
             phase = "code";
             codePhaseCategory = currentItem.category; // Remember which category we're sorting
@@ -1346,18 +1393,23 @@ function checkBinCollision() {
             hasCollided = false;  // Reset collision flag for phase transition
             isTransitioning = false;  // End transition
             showEducationalContent();
-          }, 2000); // Reduced delay for smoother transition
+          }, bounceDelayMs);
         } else {
           // Wrong bin - teach them!
           itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = CATEGORY_INFO[currentItem.category];
           const wrongInfo = bin.info;
-          message = `Oops! Try again!`;
+          // Remove text message, keep educational message
           educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
           
           // Flash red for incorrect answer
           flashColor = "red";
           flashTimer = flashDuration;
+          
+          // Start bin shake and screen shake animations
+          binShakeTimer = binShakeDuration;
+          screenShakeTimer = screenShakeDuration;
+          screenShakeIntensity = 8; // Start at max intensity
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
@@ -1405,25 +1457,30 @@ function checkBinCollision() {
             checkLevelProgression();
           }
           
-          message = `Awesome! You got it right!`;
+          // Remove text message, keep educational message
           educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
           
           // Flash green for correct answer
           flashColor = "green";
           flashTimer = flashDuration;
           
+          // Start bin bounce animation for this specific bin
+          binBounceTimer = binBounceDuration;
+          bouncingBinIndex = i;
+          
           // Check if this is tutorial interactive step (code phase demo)
           if (tutorialActive && tutorialStep < tutorialSteps.length) {
             const currentStep = tutorialSteps[tutorialStep];
             if (currentStep.interactive && currentStep.action === "setItemCodePhase" && currentItem.name === "Water bottle" && bin.code === 1 && tutorialSubStep >= 2) {
-              // Tutorial success! Advance to next tutorial step after showing success message
+              // Tutorial success! Advance to next tutorial step after bounce animation finishes
+              const bounceDelayMs = (binBounceDuration / 60) * 1000;
               setTimeout(() => {
                 nextTutorialStep();
                 resetItem();
                 phase = "category";
                 codePhaseCategory = null;
                 setupBins();
-              }, 2000);
+              }, bounceDelayMs);
               return;
             }
           }
@@ -1431,23 +1488,31 @@ function checkBinCollision() {
           messageTimer = messageDuration;
           educationalTimer = educationalDuration;
           
-          // Immediately transition to new item (no delay)
-          pickRandomItem();
-          phase = "category";
-          codePhaseCategory = null; // Reset category tracking
-          setupBins();
-          resetItem();
-          hasCollided = false;  // Reset collision flag for new item
+          // Wait for bin bounce animation to finish before transitioning back to category phase
+          const bounceDelayMs = (binBounceDuration / 60) * 1000;
+          setTimeout(() => {
+            pickRandomItem();
+            phase = "category";
+            codePhaseCategory = null; // Reset category tracking
+            setupBins();
+            resetItem();
+            hasCollided = false;  // Reset collision flag for new item
+          }, bounceDelayMs);
         } else {
           // Wrong code - teach them!
           itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
-          message = `Almost there! Keep trying!`;
+          // Remove text message, keep educational message
           educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
           
           // Flash red for incorrect answer
           flashColor = "red";
           flashTimer = flashDuration;
+          
+          // Start bin shake and screen shake animations
+          binShakeTimer = binShakeDuration;
+          screenShakeTimer = screenShakeDuration;
+          screenShakeIntensity = 8; // Start at max intensity
           
           // Don't add to trash pile during tutorial
           if (!tutorialActive) {
@@ -1513,6 +1578,11 @@ function restartGame() {
   hintsOffPopupTimer = 0;
   showNewItemsPopup = false;
   newItemsSortedThisLevel.clear();
+  binBounceTimer = 0;
+  bouncingBinIndex = -1;
+  binShakeTimer = 0;
+  screenShakeTimer = 0;
+  screenShakeIntensity = 0;
   updateNewItemsForLevel();
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
@@ -1547,15 +1617,24 @@ function checkLevelProgression() {
     message = `Level ${level}! Items fall faster now!`;
     messageTimer = messageDuration;
     
-    // Show popup for new items unlocked
-    if (newItemsForCurrentLevel.length > 0) {
-      showNewItemsPopup = true;
-    }
-    
-    // Automatically turn off hints after level 4
-    if (level >= 4 && showHints) {
-      // Show popup before turning off hints (user must dismiss it)
-      showHintsOffPopup = true;
+    // Show popup for new items unlocked after bounce animation finishes
+    // At level 4+, merge with hints-off message if hints are still on
+    if (newItemsForCurrentLevel.length > 0 || (level >= 4 && showHints)) {
+      // Wait for bin bounce animation to complete (convert frames to ms: ~667ms at 60fps)
+      const bounceDelayMs = (binBounceDuration / 60) * 1000;
+      setTimeout(() => {
+        // If level 4+ and hints are on, show merged popup (new items popup will include hints message)
+        // Otherwise just show new items popup
+        if (level >= 4 && showHints && newItemsForCurrentLevel.length > 0) {
+          showNewItemsPopup = true; // This will show merged popup
+        } else if (level >= 4 && showHints) {
+          // Level 4+ but no new items - just show hints-off popup
+          showHintsOffPopup = true;
+        } else if (newItemsForCurrentLevel.length > 0) {
+          // New items but not level 4+ - show normal new items popup
+          showNewItemsPopup = true;
+        }
+      }, bounceDelayMs);
     }
   }
 }
@@ -1851,11 +1930,16 @@ function drawNewItemsPopup() {
   const itemSpacing = 20;
   const itemPadding = 15;
   
+  // Check if this is level 4+ with hints being turned off (merged popup)
+  const isMergedPopup = (level >= 4 && showHints);
+  
   // Calculate panel dimensions
   const panelWidth = 600;
   const itemCellWidth = (panelWidth - (itemPadding * 2) - (itemSpacing * (itemsPerRow - 1))) / itemsPerRow;
   const itemCellHeight = itemImageSize + 50; // Image + text space
-  const panelHeight = 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0);
+  // Add extra height if merged popup (for hints-off message)
+  const extraHeight = isMergedPopup ? 60 : 0;
+  const panelHeight = 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + extraHeight;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   
@@ -1955,6 +2039,16 @@ function drawNewItemsPopup() {
     ctx.fillText(`#${item.code}`, cellX + itemCellWidth / 2, cellY + itemImageSize + 38);
   });
   
+  // Draw hints-off message if merged popup (level 4+)
+  if (isMergedPopup) {
+    const messageY = panelY + 120 + (rows * itemCellHeight) + (rows > 1 ? (rows - 1) * itemSpacing : 0) + 10;
+    ctx.fillStyle = "#4A5568";
+    ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("You're turning into an expert recycler!", panelX + panelWidth / 2, messageY);
+    ctx.fillText("Turning off hints...", panelX + panelWidth / 2, messageY + 25);
+  }
+  
   // Draw "press any key to continue" text at bottom
   ctx.fillStyle = "#718096";
   ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
@@ -2009,6 +2103,14 @@ function drawHintsOffPopup() {
 }
 
 function render() {
+  // Apply screen shake for incorrect answers
+  ctx.save();
+  if (screenShakeIntensity > 0) {
+    const shakeX = (Math.random() - 0.5) * screenShakeIntensity;
+    const shakeY = (Math.random() - 0.5) * screenShakeIntensity;
+    ctx.translate(shakeX, shakeY);
+  }
+  
   // Draw sky gradient background
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, "#87CEEB");
@@ -2105,16 +2207,8 @@ function render() {
     drawSpeechBubble(educationalMessage, canvas.width / 2, 90, canvas.width - 60);
   }
   
-  // Draw feedback message (with proper spacing to avoid overlap)
-  if (message) {
-    const isCorrect = message.includes("Awesome");
-    ctx.fillStyle = isCorrect ? "#4CAF50" : "#FF9800";
-    ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "center";
-    
-    ctx.fillText(message, canvas.width / 2, 170);
-    ctx.textAlign = "left";
-  }
+  // Removed feedback message - using visual animations instead
+  // (bin bounce for correct, bin shake + screen shake for incorrect)
   
   // Draw contamination alert
   if (contaminationAlertMessage && contaminationAlertTimer > 0) {
@@ -2157,8 +2251,8 @@ function render() {
   }
   
   // Draw bins AFTER items (so bins appear on top, like items going into them)
-  for (const bin of bins) {
-    drawBin(bin);
+  for (let i = 0; i < bins.length; i++) {
+    drawBin(bins[i], i);
   }
   
   // Draw flash effect overlay on top of everything
@@ -2215,6 +2309,9 @@ function render() {
   if (tutorialActive) {
     drawTutorial();
   }
+  
+  // Restore canvas transform (undo screen shake)
+  ctx.restore();
 }
 
 function drawTrashPile() {
@@ -2589,7 +2686,32 @@ function drawRecyclingSymbol(x, y, size, color) {
   ctx.restore();
 }
 
-function drawBin(bin) {
+function drawBin(bin, binIndex) {
+  // Calculate animation offsets
+  let offsetX = 0;
+  let offsetY = 0;
+  
+  // Bin bounce animation (correct answer) - smooth up and down motion
+  // Only bounce the specific bin that was correct
+  if (binBounceTimer > 0 && bouncingBinIndex === binIndex) {
+    const progress = 1 - (binBounceTimer / binBounceDuration);
+    // Bounce effect: goes up then down with easing
+    const bounceHeight = 15 * Math.sin(progress * Math.PI);
+    offsetY = -bounceHeight;
+  }
+  
+  // Bin shake animation (incorrect answer) - rapid horizontal movement
+  if (binShakeTimer > 0) {
+    const shakeAmount = 5;
+    // Rapid random shake
+    offsetX = (Math.random() - 0.5) * shakeAmount * 2;
+    offsetY = (Math.random() - 0.5) * shakeAmount;
+  }
+  
+  // Apply offsets to bin position
+  const binX = bin.x + offsetX;
+  const binY = bin.y + offsetY;
+  
   // Determine which bin image to use (green, yellow/orange, or red)
   const isGreenBin = (bin.category === "green") || (phase === "code" && codePhaseCategory === "green");
   const isOrangeBin = (bin.category === "orange") || (phase === "code" && codePhaseCategory === "orange");
@@ -2626,9 +2748,9 @@ function drawBin(bin) {
       drawWidth = baseHeight * imgAspectRatio;
     }
     
-    // Center the scaled image
-    drawX = bin.x + (bin.width - drawWidth) / 2;
-    drawY = bin.y + (bin.height - drawHeight) / 2;
+    // Center the scaled image (with animation offsets)
+    drawX = binX + (bin.width - drawWidth) / 2;
+    drawY = binY + (bin.height - drawHeight) / 2;
     
     // Apply contamination tint if contaminated (only for green bin)
     if (greenBinContaminated && isGreenBin) {
@@ -2651,8 +2773,8 @@ function drawBin(bin) {
     ctx.restore();
   } else {
     // Fallback to drawn bin for non-green bins or if image not loaded
-    // Create gradient for bin
-    const binGradient = ctx.createLinearGradient(bin.x, bin.y, bin.x, bin.y + bin.height);
+    // Create gradient for bin (with animation offsets)
+    const binGradient = ctx.createLinearGradient(binX, binY, binX, binY + bin.height);
     let baseColor = bin.color;
     
     // Show contamination effect if green bin is contaminated
@@ -2670,10 +2792,10 @@ function drawBin(bin) {
     
     ctx.fillStyle = binGradient;
     ctx.beginPath();
-    ctx.moveTo(bin.x, bin.y); // Top left
-    ctx.lineTo(bin.x + topWidth, bin.y); // Top right
-    ctx.lineTo(bin.x + topWidth - widthDiff, bin.y + bin.height); // Bottom right
-    ctx.lineTo(bin.x + widthDiff, bin.y + bin.height); // Bottom left
+    ctx.moveTo(binX, binY); // Top left
+    ctx.lineTo(binX + topWidth, binY); // Top right
+    ctx.lineTo(binX + topWidth - widthDiff, binY + bin.height); // Bottom right
+    ctx.lineTo(binX + widthDiff, binY + bin.height); // Bottom left
     ctx.closePath();
     ctx.fill();
     
@@ -2686,16 +2808,16 @@ function drawBin(bin) {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(bin.x + 2, bin.y + 2);
-    ctx.lineTo(bin.x + topWidth - 2, bin.y + 2);
-    ctx.lineTo(bin.x + topWidth - widthDiff - 2, bin.y + bin.height - 2);
-    ctx.lineTo(bin.x + widthDiff + 2, bin.y + bin.height - 2);
+    ctx.moveTo(binX + 2, binY + 2);
+    ctx.lineTo(binX + topWidth - 2, binY + 2);
+    ctx.lineTo(binX + topWidth - widthDiff - 2, binY + bin.height - 2);
+    ctx.lineTo(binX + widthDiff + 2, binY + bin.height - 2);
     ctx.closePath();
     ctx.stroke();
   }
   
-  // Draw bin content - symbol and numbers/icons together
-  const centerX = bin.x + bin.width / 2;
+  // Draw bin content - symbol and numbers/icons together (with animation offsets)
+  const centerX = binX + bin.width / 2;
   
   if (phase === "category") {
     // Draw recycling symbol image in the center (skip for bins using images)
@@ -2707,11 +2829,11 @@ function drawBin(bin) {
       if (recycleSymbolImage) {
         const symbolSize = 40;
         const symbolX = centerX - symbolSize / 2;
-        const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
+        const symbolY = binY + bin.height / 2 - symbolSize / 2;
         ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
       } else {
         // Fallback to drawn symbol if image not loaded
-        drawRecyclingSymbol(centerX, bin.y + bin.height / 2, 30, "#FFFFFF");
+        drawRecyclingSymbol(centerX, binY + bin.height / 2, 30, "#FFFFFF");
       }
     }
     
@@ -2725,8 +2847,8 @@ function drawBin(bin) {
       ctx.textAlign = "center";
       // Position at bottom, but leave space for contamination warning if needed
       const bottomY = greenBinContaminated && bin.category === "green" 
-        ? bin.y + bin.height - 5 
-        : bin.y + bin.height + 12;
+        ? binY + bin.height - 5 
+        : binY + bin.height + 12;
       ctx.fillText(codesText, centerX, bottomY);
     }
     
@@ -2734,7 +2856,7 @@ function drawBin(bin) {
     if (greenBinContaminated && bin.category === "green") {
       ctx.fillStyle = "#FF0000";
       ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
-      ctx.fillText("CONTAMINATED!", centerX, bin.y + bin.height - 8);
+      ctx.fillText("CONTAMINATED!", centerX, binY + bin.height - 8);
     }
   } else {
     // Code phase: show symbol in center, type at bottom
@@ -2749,7 +2871,7 @@ function drawBin(bin) {
     if (!usingBinImage && recycleSymbolImage) {
       const symbolSize = 35;
       const symbolX = centerX - symbolSize / 2;
-      const symbolY = bin.y + bin.height / 2 - symbolSize / 2;
+      const symbolY = binY + bin.height / 2 - symbolSize / 2;
       ctx.drawImage(recycleSymbolImage, symbolX, symbolY, symbolSize, symbolSize);
     }
     
@@ -2765,7 +2887,7 @@ function drawBin(bin) {
       } else if (bin.code === 3 || bin.code === 5) {
         numberX = centerX + 1;
       }
-      ctx.fillText(bin.code.toString(), numberX, bin.y + bin.height / 2 + 20);
+      ctx.fillText(bin.code.toString(), numberX, binY + bin.height / 2 + 20);
     }
     
     // Draw type at the bottom (step 2)
@@ -2773,7 +2895,7 @@ function drawBin(bin) {
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
       ctx.textAlign = "center";
-      ctx.fillText(labelWithoutNumber, centerX, bin.y + bin.height + 12);
+      ctx.fillText(labelWithoutNumber, centerX, binY + bin.height + 12);
     }
   }
   
