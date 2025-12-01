@@ -12,7 +12,7 @@ html, body {
 }
 
 body {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #FFFFFF;
     font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
     min-height: 100vh;
 }

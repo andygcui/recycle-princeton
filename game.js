@@ -171,7 +171,8 @@ let decontaminationBinY = 0;  // Y position of bin (at bottom)
 let decontaminationItems = [];  // Array of items falling in decontamination game
 let decontaminationItemSpeed = 3;  // Speed of items falling
 let decontaminationSpawnTimer = 0;  // Timer for spawning new items
-let decontaminationSpawnInterval = 60;  // Frames between item spawns
+let decontaminationSpawnInterval = 240;  // Frames between item spawns (slower for better visibility)
+let decontaminationSpawnOffset = 0;  // Vertical offset to reduce spacing between items
 let decontaminationCorrectCount = 0;  // Count of correct items collected
 let decontaminationRequiredCorrect = 5;  // Need 5 correct items to decontaminate
 let decontaminationWrongCount = 0;  // Count of wrong items collected
@@ -310,6 +311,7 @@ let greenBinImage = null;  // Green bin image
 let yellowBinImage = null;  // Yellow/Orange bin image
 let redBinImage = null;  // Red bin image
 let stopImage = null;  // Stop sign image for contamination indicator
+let handImage = null;  // Hand image
 
 // Keyboard state
 const keys = {
@@ -1836,6 +1838,7 @@ function startDecontaminationGame(category) {
   decontaminationBinY = canvas.height - 100;
   decontaminationItems = [];
   decontaminationSpawnTimer = 0;
+  decontaminationSpawnOffset = 0; // Reset spawn offset
   decontaminationCorrectCount = 0;
   decontaminationWrongCount = 0;
 }
@@ -1850,7 +1853,7 @@ function updateDecontaminationGame() {
     decontaminationBinX = Math.min(canvas.width - decontaminationBinWidth, decontaminationBinX + moveSpeed);
   }
   
-  // Spawn new items
+  // Spawn new items from sides with arc motion
   decontaminationSpawnTimer++;
   if (decontaminationSpawnTimer >= decontaminationSpawnInterval) {
     decontaminationSpawnTimer = 0;
@@ -1869,21 +1872,63 @@ function updateDecontaminationGame() {
       itemImage = Array.isArray(itemImageData) ? itemImageData[0] : itemImageData;
     }
     
+    // Spawn from left or right side randomly
+    const spawnFromLeft = Math.random() < 0.5;
+    const startX = spawnFromLeft ? -80 : canvas.width;
+    const startY = 50 + decontaminationSpawnOffset; // Start from top with offset
+    
+    // Calculate arc trajectory with randomized target point
+    // All items must land in the middle 2 quadrants (25% to 75% of screen width)
+    const minTargetX = canvas.width * 0.25; // 25% from left
+    const maxTargetX = canvas.width * 0.75; // 75% from left
+    const targetX = minTargetX + Math.random() * (maxTargetX - minTargetX);
+    // Vary target Y position (some higher, some lower)
+    const targetYVariation = (Math.random() - 0.5) * 100; // ±50px variation
+    const targetY = canvas.height - 50 + targetYVariation;
+    
+    const distanceX = targetX - startX;
+    const distanceY = targetY - startY;
+    
+    // Calculate velocities based on target distance for varied arc trajectories
+    // Horizontal velocity (toward target) - slowed down 0.5x, varies with distance
+    const baseVelocityX = Math.abs(distanceX) / 400;
+    const velocityX = spawnFromLeft ? baseVelocityX : -baseVelocityX;
+    
+    // Initial vertical velocity varies based on throw distance and height
+    // Longer throws need more upward velocity, shorter throws need less
+    const throwDistance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+    const baseVerticalVelocity = -2.5;
+    const distanceFactor = Math.min(throwDistance / 400, 1.5); // Scale up to 1.5x for longer throws
+    const velocityY = baseVerticalVelocity * (0.7 + distanceFactor * 0.3); // Vary between 0.7x and 1.0x
+    
+    // Gravity for arc motion - slowed down 0.5x
+    const gravity = 0.075;
+    
     decontaminationItems.push({
       item: randomItem,
-      x: Math.random() * (canvas.width - 80),
-      y: -100,
+      x: startX,
+      y: startY,
       width: 80,
       height: 80,
       image: itemImage,
-      isCorrect: isCorrect
+      isCorrect: isCorrect,
+      velocityX: velocityX,
+      velocityY: velocityY,
+      gravity: gravity
     });
+    
+    // Update spawn offset for next item (reduced spacing)
+    decontaminationSpawnOffset = (decontaminationSpawnOffset + 30) % 60; // Cycle between 0-60px offset
   }
   
-  // Update falling items
+  // Update falling items with arc motion
   for (let i = decontaminationItems.length - 1; i >= 0; i--) {
     const item = decontaminationItems[i];
-    item.y += decontaminationItemSpeed;
+    
+    // Apply arc physics
+    item.x += item.velocityX;
+    item.y += item.velocityY;
+    item.velocityY += item.gravity; // Apply gravity for arc motion
     
     // Check collision with bin
     const binHeight = 80; // Medium height for decontamination game
@@ -1908,8 +1953,10 @@ function updateDecontaminationGame() {
         endDecontaminationGame(false);
         return;
       }
-    } else if (item.y > canvas.height) {
-      // Item fell off screen - remove it
+    }
+    
+    // Remove items that fall off screen (check both sides and bottom)
+    if (item.y > canvas.height || (item.velocityX > 0 && item.x > canvas.width) || (item.velocityX < 0 && item.x < -80)) {
       decontaminationItems.splice(i, 1);
     }
   }
