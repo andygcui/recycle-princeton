@@ -2289,7 +2289,7 @@ function drawTutorial() {
   ctx.fillStyle = "#2D3748";
   ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";  // Same size for all steps
   ctx.textAlign = "center";
-  ctx.fillText(displayTitle, panelX + panelWidth / 2, panelY + 40);  // Uniform title position for all steps
+  ctx.fillText(displayTitle, panelX + panelWidth / 2, panelY + 48);  // Better spacing from top
   
   // Text (with line breaks) - use substep text if available
   const displayText = currentSubStep ? currentSubStep.text : step.text;
@@ -2297,26 +2297,29 @@ function drawTutorial() {
   ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";  // Same size for all steps
   ctx.textAlign = "left";
   const lines = displayText.split('\n');
-  let textY = panelY + 80;  // Uniform text position for all steps
+  let textY = panelY + 90;  // Better spacing from title (42px gap)
   const lineHeight = 26;  // Uniform line height for all steps
+  const textPadding = 40;  // Increased padding from sides
   lines.forEach(line => {
-    const wrappedLines = wrapText(ctx, line, panelWidth - 60, 18);  // Same font size for all steps
+    const wrappedLines = wrapText(ctx, line, panelWidth - (textPadding * 2), 18);  // More padding
     wrappedLines.forEach(wrappedLine => {
-      ctx.fillText(wrappedLine, panelX + 30, textY);
+      ctx.fillText(wrappedLine, panelX + textPadding, textY);
       textY += lineHeight;
     });
   });
   
   // Buttons (hide during interactive steps except skip)
   if (!isInteractive) {
-    const buttonHeight = 35;
-    const buttonWidth = 120;
+    const buttonHeight = 38;
+    const buttonWidth = 130;
+    const buttonPadding = 24;  // Increased padding from edges
+    const buttonBottomPadding = 24;  // Increased bottom padding
     
     // Skip button (top right) - smaller X button on first slide
     // Skip button - always use X button
-    const skipBtnSize = 30;
-    const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
-    const skipBtnY = panelY + 15;
+    const skipBtnSize = 32;
+    const skipBtnX = panelX + panelWidth - skipBtnSize - buttonPadding;
+    const skipBtnY = panelY + buttonPadding;
     ctx.fillStyle = "#F44336";
     roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
     ctx.fill();
@@ -2326,9 +2329,9 @@ function drawTutorial() {
     ctx.fillText("×", skipBtnX + skipBtnSize / 2, skipBtnY + skipBtnSize / 2 + 6);
     
     // Previous button (bottom left)
-    const buttonY = panelY + panelHeight - buttonHeight - 15;
+    const buttonY = panelY + panelHeight - buttonHeight - buttonBottomPadding;
     if (tutorialStep > 0) {
-      const prevBtnX = panelX + 20;
+      const prevBtnX = panelX + buttonPadding;
       ctx.fillStyle = "#FF9800";
       roundedRect(prevBtnX, buttonY, buttonWidth, buttonHeight, 8);
       ctx.fill();
@@ -2337,7 +2340,7 @@ function drawTutorial() {
     }
     
     // Next button (bottom right) - green "Play" button on last step
-    const nextBtnX = panelX + panelWidth - buttonWidth - 20;
+    const nextBtnX = panelX + panelWidth - buttonWidth - buttonPadding;
     ctx.fillStyle = tutorialStep === tutorialSteps.length - 1 ? "#4CAF50" : "#2196F3";
     roundedRect(nextBtnX, buttonY, buttonWidth, buttonHeight, 8);
     ctx.fill();
@@ -2351,13 +2354,15 @@ function drawTutorial() {
     ctx.fillText(`Step ${tutorialStep + 1} of ${tutorialSteps.length}`, panelX + panelWidth / 2, buttonY + buttonHeight / 2 + 5);
   } else {
     // Interactive step - show skip button and optionally Next button
-    const buttonHeight = 35;
-    const buttonWidth = 120;
+    const buttonHeight = 38;
+    const buttonWidth = 130;
+    const buttonPadding = 24;  // Increased padding from edges
+    const buttonBottomPadding = 24;  // Increased bottom padding
     
     // Skip button at top right - always use X button
-    const skipBtnSize = 30;
-    const skipBtnX = panelX + panelWidth - skipBtnSize - 15;
-    const skipBtnY = panelY + 15;
+    const skipBtnSize = 32;
+    const skipBtnX = panelX + panelWidth - skipBtnSize - buttonPadding;
+    const skipBtnY = panelY + buttonPadding;
     ctx.fillStyle = "#F44336";
     roundedRect(skipBtnX, skipBtnY, skipBtnSize, skipBtnSize, 6);
     ctx.fill();
@@ -2368,11 +2373,11 @@ function drawTutorial() {
     
     // Show "Try It Now" and "Previous" buttons on substep 0 (explanation)
     if (currentSubStep && tutorialSubStep === 0 && step.substeps) {
-      const buttonY = panelY + panelHeight - buttonHeight - 15;
+      const buttonY = panelY + panelHeight - buttonHeight - buttonBottomPadding;
       
       // Previous button (bottom left) - only show if not first tutorial step
       if (tutorialStep > 0) {
-        const prevBtnX = panelX + 20;
+        const prevBtnX = panelX + buttonPadding;
         ctx.fillStyle = "#FF9800";
         roundedRect(prevBtnX, buttonY, buttonWidth, buttonHeight, 8);
         ctx.fill();
@@ -2381,7 +2386,7 @@ function drawTutorial() {
       }
       
       // Try It Now button (bottom right) - goes directly to gameplay
-      const tryBtnX = panelX + panelWidth - buttonWidth - 20;
+      const tryBtnX = panelX + panelWidth - buttonWidth - buttonPadding;
       ctx.fillStyle = "#4CAF50";
       roundedRect(tryBtnX, buttonY, buttonWidth, buttonHeight, 8);
       ctx.fill();
@@ -2391,8 +2396,8 @@ function drawTutorial() {
     
     // Show "Try Now!" button on substep 1 (Ready? step) to start playing
     if (currentSubStep && tutorialSubStep === 1 && step.substeps && tutorialSubStep < step.substeps.length) {
-      const nextBtnX = panelX + panelWidth - buttonWidth - 20;
-      const nextBtnY = panelY + panelHeight - buttonHeight - 15;
+      const nextBtnX = panelX + panelWidth - buttonWidth - buttonPadding;
+      const nextBtnY = panelY + panelHeight - buttonHeight - buttonBottomPadding;
       ctx.fillStyle = "#4CAF50";
       roundedRect(nextBtnX, nextBtnY, buttonWidth, buttonHeight, 8);
       ctx.fill();

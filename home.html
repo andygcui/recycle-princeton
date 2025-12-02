@@ -29,7 +29,9 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 30px;
+            width: 100%;
+            max-width: 600px;
+            padding: 0 40px;
             z-index: 10;
             pointer-events: none;
         }
@@ -38,78 +40,94 @@
             pointer-events: auto;
         }
         
+        .title-section {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
         .title {
-            font-size: 48px;
+            font-size: 56px;
             font-weight: bold;
             color: #2D3748;
             text-align: center;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
-            margin: 0;
+            margin: 0 0 12px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            letter-spacing: -1px;
         }
         
         .subtitle {
-            font-size: 24px;
+            font-size: 22px;
             color: #4A5568;
             text-align: center;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
             margin: 0;
+            font-weight: normal;
         }
         
         .input-container {
             background: rgba(255, 255, 255, 0.98);
-            padding: 25px;
-            border-radius: 15px;
-            border: 2px solid #FFD700;
-            min-width: 400px;
+            padding: 32px;
+            border-radius: 20px;
+            border: 3px solid #FFD700;
+            width: 100%;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
         
         .input-label {
-            font-size: 18px;
+            font-size: 19px;
             color: #2D3748;
-            margin-bottom: 10px;
+            margin-bottom: 14px;
             display: block;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
+            font-weight: bold;
         }
         
         .location-input {
             width: 100%;
-            padding: 12px;
+            padding: 14px 16px;
             font-size: 18px;
             border: 3px solid #4CAF50;
-            border-radius: 10px;
+            border-radius: 12px;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
             box-sizing: border-box;
+            transition: all 0.2s ease;
         }
         
         .location-input:focus {
             outline: none;
             border-color: #45a049;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
         }
         
         .example-text {
             font-size: 14px;
             color: #666;
-            margin-top: 8px;
+            margin-top: 10px;
             font-style: italic;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
         }
         
         .button-container {
             display: flex;
-            gap: 20px;
+            gap: 16px;
             justify-content: center;
             flex-wrap: wrap;
+            width: 100%;
         }
         
         .play-button, .info-button {
-            padding: 15px 35px;
+            padding: 16px 42px;
             font-size: 20px;
             font-weight: bold;
             border: none;
-            border-radius: 12px;
+            border-radius: 14px;
             cursor: pointer;
             font-family: 'Comic Sans MS', 'Trebuchet MS', Arial, sans-serif;
-            transition: transform 0.2s;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            min-width: 180px;
         }
         
         .play-button {
@@ -118,12 +136,13 @@
         }
         
         .play-button:hover {
-            transform: translateY(-2px);
+            transform: translateY(-3px);
             background: #45a049;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
         }
         
         .play-button:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
         }
         
         .info-button {
@@ -132,20 +151,23 @@
         }
         
         .info-button:hover {
-            transform: translateY(-2px);
+            transform: translateY(-3px);
             background: #1976D2;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
         }
         
         .info-button:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
         }
     </style>
 </head>
 <body class="home-page">
     <canvas id="homeCanvas"></canvas>
     <div class="ui-overlay">
-        <h1 class="title">Recycle Game</h1>
-        <p class="subtitle">Learn how to recycle in your area!</p>
+        <div class="title-section">
+            <h1 class="title">Recycle Quest</h1>
+            <p class="subtitle">Learn how to recycle in your area!</p>
+        </div>
         
         <div class="input-container">
             <label class="input-label" for="locationInput">Enter your location:</label>
