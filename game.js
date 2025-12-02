@@ -1301,9 +1301,10 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (e.key === "h" || e.key === "H") {
-    // Toggle sound effects
+    // Toggle sound effects and hand visibility together
     e.preventDefault();
     soundEnabled = !soundEnabled;
+    showHand = soundEnabled; // Keep hand visibility in sync with sound
   }
   if (e.key === "t" || e.key === "T") {
     // Restart tutorial (for testing/debugging)
@@ -3708,7 +3709,7 @@ function drawItem() {
   if (currentItemImage && currentItemImage.complete && currentItemImage.naturalWidth > 0) {
     // Draw item image - just the image, no box, preserve aspect ratio
     ctx.save();
-    
+  
     // Calculate aspect ratio and scale to fit while maintaining original proportions
     const maxWidth = itemWidth;
     const maxHeight = itemHeight - 20; // Leave room for code label at bottom
