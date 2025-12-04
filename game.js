@@ -105,8 +105,8 @@ let itemX = 0;
 let itemY = 0;
 let itemSpeedY = 0.5;
 let itemSpeedX = 0;
-let itemWidth = 150;  // Increased from 100
-let itemHeight = 120;  // Increased from 80
+let itemWidth = 187.5;  // Scaled up 1.25x from 150
+let itemHeight = 150;  // Scaled up 1.25x from 120
 
 let phase = "category";
 let codePhaseCategory = null;  // Track which category we're sorting codes for (green/orange/red)
@@ -119,7 +119,7 @@ let messageDuration = 180;
 let educationalDuration = 300; // Longer for educational content
 
 let bins = [];
-let showHints = true;  // Show educational hints
+let showHints = false;  // Show educational hints (default off)
 let gameLocation = "Princeton, NJ";  // Store location for display
 let hasCollided = false;  // Prevent multiple collision checks per item
 let isTransitioning = false;  // Flag to prevent updates during phase transitions
@@ -131,8 +131,8 @@ let baseSpeedY = 0.5;  // Base falling speed
 let gameOver = false;
 let gameOverMessage = "";
 let gamePaused = false;  // Pause state
-let showHand = false;  // Show hand image (starts hidden)
-let soundEnabled = false;  // Sound effects enabled (starts off)
+let showHand = true;  // Show hand image (default on)
+let soundEnabled = true;  // Sound effects enabled (default on)
 
 // Level-based item unlocking
 const ITEMS_BY_LEVEL = {
@@ -349,7 +349,7 @@ function initGame() {
   
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 180; // Start below the "Recycle this [item]!" text
+  itemY = 210; // Start 30px lower (was 180)
   setupBins();
   
   // Check if this is first time playing (tutorial)
@@ -401,12 +401,18 @@ function initGame() {
     }
     
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Scale click coordinates to match logical canvas dimensions
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
     
-    // Check if click is on info button (circular area)
-    const infoButtonX = canvas.width - 160;
-    const infoButtonY = 30 + 4;
+    // Check if click is on info button (circular area) - using same position as render
+    const headerHeight = 60;
+    const scoreBadgeWidth = 200;  // Match render function
+    const scoreBadgeX = canvas.width - scoreBadgeWidth - 15;
+    const infoButtonX = scoreBadgeX - 35;  // 15px spacing from score badge
+    const infoButtonY = 10 + headerHeight / 2;  // Centered vertically
     const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
     
     const dx = x - infoButtonX;
@@ -417,10 +423,10 @@ function initGame() {
       window.location.href = 'info.html';
     }
     
-    // Check clicks on leaderboard button (in header)
-    const leaderboardBtnX = 300;
-    const leaderboardBtnY = 20;
-    const leaderboardBtnWidth = 90;
+    // Check clicks on leaderboard button (in header) - using same positions as render
+    const leaderboardBtnX = 210;  // Moved 10px right from 200
+    const leaderboardBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
+    const leaderboardBtnWidth = 120;  // Wider for larger text
     const leaderboardBtnHeight = 30;
     if (x >= leaderboardBtnX && x <= leaderboardBtnX + leaderboardBtnWidth && 
         y >= leaderboardBtnY && y <= leaderboardBtnY + leaderboardBtnHeight) {
@@ -428,9 +434,9 @@ function initGame() {
       showPvP = false;
     }
     
-    // Check clicks on PvP button (in header)
-    const pvpBtnX = 400;
-    const pvpBtnY = 20;
+    // Check clicks on PvP button (in header) - using same positions as render
+    const pvpBtnX = 350;  // Moved 10px right from 340
+    const pvpBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
     const pvpBtnWidth = 70;
     const pvpBtnHeight = 30;
     if (x >= pvpBtnX && x <= pvpBtnX + pvpBtnWidth && 
@@ -1005,9 +1011,9 @@ function showEducationalContent() {
 
 function setupBins() {
   bins = [];
-  const binWidth = 180;
-  const binHeight = 100;
-  const binY = canvas.height - binHeight - 72;
+  const binWidth = 207;  // Increased from 180 (15% larger)
+  const binHeight = 115;  // Increased from 100 (15% larger)
+  const binY = canvas.height - binHeight - 77;  // Moved up 5px from -72
   const spacing = (canvas.width - (binWidth * 3)) / 4;
   
   if (phase === "category") {
@@ -1578,7 +1584,7 @@ function checkBinCollision() {
             codePhaseCategory = currentItem.category; // Remember which category we're sorting
             setupBins();
             itemX = canvas.width / 2 - itemWidth / 2;
-            itemY = 180; // Start below the "Recycle this [item]!" text
+            itemY = 210; // Start 30px lower (was 180)
             hasCollided = false;  // Reset collision flag for phase transition
             isTransitioning = false;  // End transition
             showEducationalContent();
@@ -1769,7 +1775,7 @@ function checkBinCollision() {
 
 function resetItem() {
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 180; // Start below the "Recycle this [item]!" text
+  itemY = 210; // Start 30px lower (was 180)
   hasCollided = false;  // Reset collision flag
   // Don't reset itemAttempts here - only reset when new item is picked
 }
@@ -2190,10 +2196,10 @@ function drawTutorial() {
   if (step.highlight) {
     if (step.highlight.type === "bin" && bins.length > step.highlight.binIndex) {
       const bin = bins[step.highlight.binIndex];
-      highlightX = bin.x + 16;  // 1px to the left (was +17, now +16)
-      highlightY = bin.y - 57;  // 3px down (was -60, now -57)
-      highlightWidth = bin.width - 27;  // 3px thinner on right side (unchanged)
-      highlightHeight = bin.height + 110;  // 5px taller on bottom (was +105, now +110)
+      highlightX = bin.x + 16;  // Offset from left edge
+      highlightY = bin.y - 65;  // Offset above bin (moved up 8px total from -57)
+      highlightWidth = bin.width - 31;  // Scaled up from 27 to match larger bin (15% increase)
+      highlightHeight = bin.height + 127;  // Scaled up from 110 to match larger bin (15% increase)
       highlightRadius = 10;
     } else if (step.highlight.type === "item") {
       // Use actual item position if available
@@ -2875,62 +2881,75 @@ function render() {
   // Draw clouds in background
   drawClouds();
   
+  // Draw hand image (behind header, before items)
+  if (showHand && handImage && handImage.complete && handImage.naturalWidth > 0 && !tutorialActive && !gameOver && !decontaminationActive) {
+    const handWidth = 540;  // Scaled up 1.8x from 300
+    const handHeight = 540;  // Scaled up 1.8x from 300
+    const handX = canvas.width - handWidth + 90;  // Moved 40px to the right (was -180, now -140)
+    const handY = canvas.height / 25 - 300;  // Moved down 20px from previous position
+    ctx.drawImage(handImage, handX, handY, handWidth, handHeight);
+  }
+  
   // Draw educational header
   drawEducationalHeader();
   
-  // Draw friendly header with rounded background
+  // Draw friendly header with rounded background (taller)
+  const headerHeight = 60;  // Increased from 50
   ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-  roundedRect(10, 10, canvas.width - 20, 50, 15);
+  roundedRect(10, 10, canvas.width - 20, headerHeight, 15);
   ctx.fill();
   
-  // Draw location text (left side)
+  // Draw location text (left side) - larger font
   ctx.fillStyle = "#666";
-  ctx.font = "14px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "left";
-  ctx.fillText(gameLocation, 25, 42);
+  ctx.fillText(gameLocation, 35, 10 + headerHeight / 2 + 5);  // Moved 10px right from 25
   
-  // Draw Level indicator (left-center)
-  const levelX = 200;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  roundedRect(levelX, 20, 80, 30, 8);
-  ctx.fill();
-  ctx.fillStyle = "#2D3748";
-  ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(`Level ${level}`, levelX + 40, 40);
-  ctx.textAlign = "left";
-  
-  // Draw Leaderboard button (center-left)
-  const leaderboardBtnX = 300;
-  const leaderboardBtnY = 20;
-  const leaderboardBtnWidth = 90;
+  // Draw Leaderboard button (moved left after removing level)
+  const leaderboardBtnX = 210;  // Moved 10px right from 200
+  const leaderboardBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
+  const leaderboardBtnWidth = 120;  // Wider for larger text
   const leaderboardBtnHeight = 30;
   ctx.fillStyle = showLeaderboard ? "#4CAF50" : "rgba(255, 255, 255, 0.9)";
   roundedRect(leaderboardBtnX, leaderboardBtnY, leaderboardBtnWidth, leaderboardBtnHeight, 8);
   ctx.fill();
   ctx.fillStyle = showLeaderboard ? "#FFFFFF" : "#2D3748";
-  ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText("Leaderboard", leaderboardBtnX + leaderboardBtnWidth / 2, leaderboardBtnY + leaderboardBtnHeight / 2 + 4);
+  ctx.fillText("Leaderboard", leaderboardBtnX + leaderboardBtnWidth / 2, leaderboardBtnY + leaderboardBtnHeight / 2 + 5);
   ctx.textAlign = "left";
   
-  // Draw PvP button (center-right)
-  const pvpBtnX = 400;
-  const pvpBtnY = 20;
+  // Draw PvP button (moved left after removing level)
+  const pvpBtnX = 350;  // Moved 10px right from 340
+  const pvpBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
   const pvpBtnWidth = 70;
   const pvpBtnHeight = 30;
   ctx.fillStyle = showPvP ? "#2196F3" : "rgba(255, 255, 255, 0.9)";
   roundedRect(pvpBtnX, pvpBtnY, pvpBtnWidth, pvpBtnHeight, 8);
   ctx.fill();
   ctx.fillStyle = showPvP ? "#FFFFFF" : "#2D3748";
-  ctx.font = "bold 12px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText("PvP", pvpBtnX + pvpBtnWidth / 2, pvpBtnY + pvpBtnHeight / 2 + 4);
+  ctx.fillText("PvP", pvpBtnX + pvpBtnWidth / 2, pvpBtnY + pvpBtnHeight / 2 + 5);
   ctx.textAlign = "left";
   
-  // Draw info button (circular icon) - positioned before score
-  const infoButtonX = canvas.width - 160;
-  const infoButtonY = 30 + 4;
+  // Draw score badge (right side) - larger to fit "Items recycled: X"
+  const scoreBadgeWidth = 200;  // Reduced by 20px from 220
+  const scoreBadgeX = canvas.width - scoreBadgeWidth - 15;  // 15px from right edge
+  const scoreBadgeY = 10 + (headerHeight - 40) / 2;  // Centered vertically
+  ctx.fillStyle = "#FFD700";
+  roundedRect(scoreBadgeX, scoreBadgeY, scoreBadgeWidth, 40, 20);
+  ctx.fill();
+  
+  // Draw "Items recycled" text - left-aligned with padding
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "left";
+  ctx.fillText(`Items recycled: ${score}`, scoreBadgeX + 15, scoreBadgeY + 25);
+  
+  // Draw info button (circular icon) - positioned to the left of score badge
+  const infoButtonX = scoreBadgeX - 35;  // 15px spacing from score badge
+  const infoButtonY = 10 + headerHeight / 2;  // Centered vertically
   const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
   
   ctx.fillStyle = "#2196F3";
@@ -2944,22 +2963,6 @@ function render() {
   ctx.textAlign = "center";
   ctx.fillText("i", infoButtonX, infoButtonY + 4); // Adjusted vertical offset
   ctx.textAlign = "left";
-  
-  // Draw score badge (right side)
-  ctx.fillStyle = "#FFD700";
-  roundedRect(canvas.width - 140, 15, 120, 40, 20);
-  ctx.fill();
-  
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(`Score: ${score}`, canvas.width - 80, 40);
-  ctx.textAlign = "left";
-  
-  // Draw educational message in friendly speech bubble (with proper spacing)
-  if (educationalMessage) {
-    drawSpeechBubble(educationalMessage, canvas.width / 2, 90, canvas.width - 60);
-  }
   
   // Removed feedback message - using visual animations instead
   // (bin bounce for correct, bin shake + screen shake for incorrect)
@@ -3021,15 +3024,6 @@ function render() {
     drawFakePvP();
   }
   
-  // Draw hand image (only during normal gameplay and if visible)
-  if (showHand && handImage && handImage.complete && handImage.naturalWidth > 0 && !tutorialActive && !gameOver && !decontaminationActive) {
-    const handWidth = 300;  // Scaled down 2x from 600
-    const handHeight = 300;  // Scaled down 2x from 600
-    const handX = canvas.width - handWidth;  // Right edge of screen
-    const handY = canvas.height / 25;  // Centered vertically
-    ctx.drawImage(handImage, handX, handY, handWidth, handHeight);
-  }
-  
   // Draw pause overlay
   if (gamePaused && !gameOver && !tutorialActive && !decontaminationActive) {
     // Draw semi-transparent overlay
@@ -3048,10 +3042,7 @@ function render() {
     ctx.textAlign = "left";
   }
   
-  // Draw game over screen
-  if (gameOver) {
-    drawGameOverScreen();
-  }
+  // Game over screen removed - game just continues
   
   // Draw question mark help button (only if tutorial not active)
   if (!tutorialActive) {
@@ -3312,42 +3303,7 @@ function drawFakePvP() {
   ctx.textAlign = "left";
 }
 
-function drawGameOverScreen() {
-  // Dark overlay
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Game over panel
-  const panelX = canvas.width / 2 - 250;
-  const panelY = canvas.height / 2 - 100;
-  const panelWidth = 500;
-  const panelHeight = 200;
-  
-  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
-  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
-  ctx.fill();
-  
-  ctx.strokeStyle = "#F44336";
-  ctx.lineWidth = 4;
-  ctx.stroke();
-  
-  // Message (handle multiple lines)
-  ctx.fillStyle = "#2D3748";
-  ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  const messageLines = gameOverMessage.split('\n');
-  let messageY = panelY + 60;
-  messageLines.forEach(line => {
-    ctx.fillText(line, panelX + panelWidth / 2, messageY);
-    messageY += 30;
-  });
-  
-  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.fillText(`Final Score: ${score} | Level: ${level}`, panelX + panelWidth / 2, panelY + 120);
-  ctx.fillText("Press R to restart", panelX + panelWidth / 2, panelY + 160);
-  
-  ctx.textAlign = "left";
-}
+// Game over screen function removed - game continues without popup
 
 function drawClouds() {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
@@ -3732,6 +3688,18 @@ function drawItem() {
       drawWidth = maxHeight * imgAspectRatio;
       drawX = itemX + (maxWidth - drawWidth) / 2; // Center horizontally
       drawY = itemY;
+    }
+    
+    // Scale down PVC pipe by 0.8x
+    if (currentItem && currentItem.name === "PVC pipe") {
+      const scaleFactor = 0.8;
+      const scaledWidth = drawWidth * scaleFactor;
+      const scaledHeight = drawHeight * scaleFactor;
+      // Re-center after scaling
+      drawX = itemX + (maxWidth - scaledWidth) / 2;
+      drawY = itemY + (maxHeight - scaledHeight) / 2;
+      drawWidth = scaledWidth;
+      drawHeight = scaledHeight;
     }
     
     // Draw image at original aspect ratio
