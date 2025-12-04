@@ -1,8 +1,8 @@
 // canvas setup
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-canvas.width = 800;
-canvas.height = 700; 
+canvas.width = 768;
+canvas.height = 1024; 
 
 // education styff for the info page
 const CATEGORY_INFO = {
@@ -476,12 +476,10 @@ function initGame() {
       const currentSubStep = step.substeps ? step.substeps[tutorialSubStep] : null;
       const isReadyStep = isInteractive && currentSubStep && tutorialSubStep === 1;
       const isExplanationStep = isInteractive && tutorialSubStep === 0;
-      const panelWidth = isInteractive ? 700 : 600;
-      const panelHeight = isInteractive ? ((isReadyStep || isExplanationStep) ? 300 : 120) : 300;
+      const panelWidth = 700;  // Same width for all panels
+      const panelHeight = 300;  // Same height for all panels
       const panelX = (canvas.width - panelWidth) / 2;
-      const panelY = isInteractive ? 10 : (step.highlight && step.highlight.y < canvas.height / 2 
-        ? canvas.height - panelHeight - 30 
-        : 50);
+      const panelY = (canvas.height - panelHeight) / 2;  // Always centered vertically
       
       if (isInteractive) {
         const buttonHeight = 35;
@@ -2262,17 +2260,15 @@ function drawTutorial() {
   }
   
   // Draw tutorial panel
-  // Make panel smaller and at top for interactive steps
+  // All panels are the same size and centered vertically
   const isInteractive = step.interactive;
   const isFirstStep = tutorialStep === 0;
   const isReadyStep = isInteractive && currentSubStep && tutorialSubStep === 1;
   const isExplanationStep = isInteractive && tutorialSubStep === 0;
-  const panelWidth = isInteractive ? 700 : 600;
-  const panelHeight = isInteractive ? ((isReadyStep || isExplanationStep) ? 300 : 120) : 300;
+  const panelWidth = 700;  // Same width for all panels
+  const panelHeight = 300;  // Same height for all panels (like "Try it" panels)
   const panelX = (canvas.width - panelWidth) / 2;
-  const panelY = isInteractive ? (canvas.height - panelHeight) / 2 : (step.highlight && step.highlight.y < canvas.height / 2 
-    ? canvas.height - panelHeight - 30 
-    : 50);
+  const panelY = (canvas.height - panelHeight) / 2;  // Always centered vertically
   
   // Panel background
   ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
@@ -3027,10 +3023,10 @@ function render() {
   
   // Draw hand image (only during normal gameplay and if visible)
   if (showHand && handImage && handImage.complete && handImage.naturalWidth > 0 && !tutorialActive && !gameOver && !decontaminationActive) {
-    const handWidth = 600;
-    const handHeight = 600;
-    const handX = -10; // Temporary position - user will move it later
-    const handY = -100;
+    const handWidth = 300;  // Scaled down 2x from 600
+    const handHeight = 300;  // Scaled down 2x from 600
+    const handX = canvas.width - handWidth;  // Right edge of screen
+    const handY = canvas.height / 25;  // Centered vertically
     ctx.drawImage(handImage, handX, handY, handWidth, handHeight);
   }
   
@@ -3714,7 +3710,7 @@ function drawItem() {
   if (currentItemImage && currentItemImage.complete && currentItemImage.naturalWidth > 0) {
     // Draw item image - just the image, no box, preserve aspect ratio
     ctx.save();
-  
+    
     // Calculate aspect ratio and scale to fit while maintaining original proportions
     const maxWidth = itemWidth;
     const maxHeight = itemHeight - 20; // Leave room for code label at bottom
