@@ -335,6 +335,8 @@ let handImage = null;  // Hand image
 let correctSound = null;  // Correct sound effect
 let incorrectSound = null;  // Incorrect sound effect
 let oopsSound = null;  // Oops sound effect (when item falls off screen)
+let backgroundMusic = null;  // Background music
+let backgroundMusic2 = null;  // Background music for decontamination minigame
 
 // Keyboard state
 const keys = {
@@ -363,6 +365,8 @@ function initGame() {
   loadCorrectSound();
   loadIncorrectSound();
   loadOopsSound();
+  loadBackgroundMusic();
+  loadBackgroundMusic2();
   
   // Initialize new items for level 1
   updateNewItemsForLevel();
@@ -840,10 +844,32 @@ function loadIncorrectSound() {
 function loadOopsSound() {
   const audio = new Audio('images/oops.mp3');
   audio.preload = 'auto';
-  audio.volume = 0.4; // Set volume to 40%
+  audio.volume = 0.8; // Set volume to 80%
   oopsSound = audio;
   audio.onerror = () => {
     console.log('Oops sound not found');
+  };
+}
+
+function loadBackgroundMusic() {
+  const audio = new Audio('images/music.mp3');
+  audio.preload = 'auto';
+  audio.loop = true; // Loop the music
+  audio.volume = 0.5; // Set volume to 50%
+  backgroundMusic = audio;
+  audio.onerror = () => {
+    console.log('Background music not found');
+  };
+}
+
+function loadBackgroundMusic2() {
+  const audio = new Audio('images/music2.mp3');
+  audio.preload = 'auto';
+  audio.loop = true; // Loop the music
+  audio.volume = 0.5; // Set volume to 50%
+  backgroundMusic2 = audio;
+  audio.onerror = () => {
+    console.log('Background music2 not found');
   };
 }
 
@@ -1479,6 +1505,47 @@ window.addEventListener("wheel", (e) => {
 // GAME LOGIC
 // ============================================================================
 function update() {
+  // Manage background music
+  // Only stop music when game is over, otherwise keep playing (including during popups)
+  const shouldPlayMusic = !gameOver && 
+                           !gamePaused && 
+                           (!tutorialActive || (tutorialActive && tutorialSteps[tutorialStep]?.interactive && tutorialSubStep >= 2)) &&
+                           soundEnabled;
+  
+  if (decontaminationActive) {
+    // Play music2.mp3 during decontamination minigame
+    if (backgroundMusic && !backgroundMusic.paused) {
+      backgroundMusic.pause();
+    }
+    if (backgroundMusic2) {
+      if (shouldPlayMusic) {
+        if (backgroundMusic2.paused) {
+          backgroundMusic2.play().catch(err => console.log('Could not play background music2:', err));
+        }
+      } else {
+        if (!backgroundMusic2.paused) {
+          backgroundMusic2.pause();
+        }
+      }
+    }
+  } else {
+    // Play music.mp3 during normal gameplay
+    if (backgroundMusic2 && !backgroundMusic2.paused) {
+      backgroundMusic2.pause();
+    }
+    if (backgroundMusic) {
+      if (shouldPlayMusic) {
+        if (backgroundMusic.paused) {
+          backgroundMusic.play().catch(err => console.log('Could not play background music:', err));
+        }
+      } else {
+        if (!backgroundMusic.paused) {
+          backgroundMusic.pause();
+        }
+      }
+    }
+  }
+  
   // Pause game when paused, hints off popup, new items popup, contamination popup, or help panel is shown
   if (gamePaused || showHintsOffPopup || showNewItemsPopup || showContaminationPopup || showHelpPanel) {
     return; // Don't update game logic while paused or popup is shown
