@@ -200,6 +200,12 @@ let showPvP = false;
 let showHelpPanel = false;  // Show help panel with controls and plastics grid
 let helpPanelScrollY = 0;  // Scroll position for help panel
 
+// Header visibility and animation
+let headerVisible = true;  // Whether header is visible
+let headerAnimationProgress = 1.0;  // Animation progress (1.0 = fully visible, 0.0 = fully hidden)
+let headerAnimationTarget = 1.0;  // Target animation state (1.0 = show, 0.0 = hide)
+const headerAnimationSpeed = 0.1;  // Animation speed per frame
+
 // Tutorial system
 let tutorialActive = false;
 let tutorialStep = 0;
@@ -489,6 +495,40 @@ function initGame() {
         y >= pvpBtnY && y <= pvpBtnY + pvpBtnHeight) {
       showPvP = !showPvP;
       showLeaderboard = false;
+    }
+    
+    // Check clicks on header area for toggle (only if not in tutorial, popups, or decontamination game)
+    if (!tutorialActive && !showHintsOffPopup && !showNewItemsPopup && !showContaminationPopup && !showHelpPanel && !decontaminationActive && !gameOver) {
+      const headerX = 10;
+      const headerY = 10;
+      const headerWidth = canvas.width - 20;
+      const headerAreaHeight = 60; // Height of header area
+      
+      // Check if click is in header area
+      const isInHeaderArea = x >= headerX && x <= headerX + headerWidth && y >= headerY && y <= headerY + headerAreaHeight;
+      
+      // Check if click is NOT on any buttons (info button, leaderboard, PvP, score badge)
+      const scoreBadgeX = canvas.width - 200 - 15;
+      const scoreBadgeY = 10 + (headerHeight - 40) / 2;
+      const isOnInfoButton = distance <= infoButtonRadius;
+      const isOnLeaderboardBtn = x >= leaderboardBtnX && x <= leaderboardBtnX + leaderboardBtnWidth && 
+                                  y >= leaderboardBtnY && y <= leaderboardBtnY + leaderboardBtnHeight;
+      const isOnPvPBtn = x >= pvpBtnX && x <= pvpBtnX + pvpBtnWidth && 
+                          y >= pvpBtnY && y <= pvpBtnY + pvpBtnHeight;
+      const isOnScoreBadge = x >= scoreBadgeX && x <= scoreBadgeX + 200 && 
+                             y >= scoreBadgeY && y <= scoreBadgeY + 40;
+      
+      if (isInHeaderArea && !isOnInfoButton && !isOnLeaderboardBtn && !isOnPvPBtn && !isOnScoreBadge) {
+        // Toggle header visibility
+        headerVisible = !headerVisible;
+        headerAnimationTarget = headerVisible ? 1.0 : 0.0;
+      }
+      
+      // If header is hidden, check if click is in the top area to restore it
+      if (!headerVisible && y >= 0 && y <= 20) {
+        headerVisible = true;
+        headerAnimationTarget = 1.0;
+      }
     }
     
     // Check clicks on contaminated bins for decontamination (only if tutorial not active and not in decontamination game)
@@ -1508,6 +1548,16 @@ function update() {
     }
   }
   
+  // Update header animation
+  if (headerAnimationProgress !== headerAnimationTarget) {
+    const diff = headerAnimationTarget - headerAnimationProgress;
+    if (Math.abs(diff) < headerAnimationSpeed) {
+      headerAnimationProgress = headerAnimationTarget;
+    } else {
+      headerAnimationProgress += diff > 0 ? headerAnimationSpeed : -headerAnimationSpeed;
+    }
+  }
+  
   // Update level-based speed
   itemSpeedY = baseSpeedY * (1 + (level - 1) * 0.3);  // 30% faster per level
   
@@ -2187,12 +2237,7 @@ function renderDecontaminationGame() {
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "bold 32px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.textAlign = "center";
-  ctx.fillText(` ${decontaminationBinCategory.charAt(0).toUpperCase() + decontaminationBinCategory.slice(1)} decomtaminate bin asdf...`, canvas.width / 2, 50);
-  
-  // Draw instructions
-  ctx.fillStyle = "#CCCCCC";
-  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.fillText("asdf ", canvas.width / 2, 90);
+  ctx.fillText(`Decontaminate ${decontaminationBinCategory.charAt(0).toUpperCase() + decontaminationBinCategory.slice(1)} Bin!`, canvas.width / 2, 50);
   
   // Draw progress (only if not showing tutorial or result popup)
   if (!showDecontaminationTutorial && !showDecontaminationResult) {
@@ -3156,76 +3201,96 @@ function render() {
   // Draw educational header
   drawEducationalHeader();
   
-  // Draw friendly header with rounded background (taller)
+  // Draw friendly header with rounded background (taller) - with fold animation
   const headerHeight = 60;  // Increased from 50
-  ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-  roundedRect(10, 10, canvas.width - 20, headerHeight, 15);
-  ctx.fill();
+  const baseHeaderY = 10;
+  const baseHeaderHeight = headerHeight;
   
-  // Draw location text (left side) - larger font
-  ctx.fillStyle = "#666";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "left";
-  ctx.fillText(gameLocation, 35, 10 + headerHeight / 2 + 5);  // Moved 10px right from 25
+  // Calculate animated values for fold-up effect
+  const animatedHeight = baseHeaderHeight * headerAnimationProgress;
+  const animatedY = baseHeaderY - (baseHeaderHeight - animatedHeight); // Move up as it folds
+  const headerAlpha = headerAnimationProgress; // Fade out as it folds
   
-  // Draw Leaderboard button (moved left after removing level)
-  const leaderboardBtnX = 210;  // Moved 10px right from 200
-  const leaderboardBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
-  const leaderboardBtnWidth = 120;  // Wider for larger text
-  const leaderboardBtnHeight = 30;
-  ctx.fillStyle = showLeaderboard ? "#4CAF50" : "rgba(255, 255, 255, 0.9)";
-  roundedRect(leaderboardBtnX, leaderboardBtnY, leaderboardBtnWidth, leaderboardBtnHeight, 8);
-  ctx.fill();
-  ctx.fillStyle = showLeaderboard ? "#FFFFFF" : "#2D3748";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("Leaderboard", leaderboardBtnX + leaderboardBtnWidth / 2, leaderboardBtnY + leaderboardBtnHeight / 2 + 5);
-  ctx.textAlign = "left";
-  
-  // Draw PvP button (moved left after removing level)
-  const pvpBtnX = 350;  // Moved 10px right from 340
-  const pvpBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
-  const pvpBtnWidth = 70;
-  const pvpBtnHeight = 30;
-  ctx.fillStyle = showPvP ? "#2196F3" : "rgba(255, 255, 255, 0.9)";
-  roundedRect(pvpBtnX, pvpBtnY, pvpBtnWidth, pvpBtnHeight, 8);
-  ctx.fill();
-  ctx.fillStyle = showPvP ? "#FFFFFF" : "#2D3748";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("PvP", pvpBtnX + pvpBtnWidth / 2, pvpBtnY + pvpBtnHeight / 2 + 5);
-  ctx.textAlign = "left";
-  
-  // Draw score badge (right side) - larger to fit "Items recycled: X"
-  const scoreBadgeWidth = 200;  // Reduced by 20px from 220
-  const scoreBadgeX = canvas.width - scoreBadgeWidth - 15;  // 15px from right edge
-  const scoreBadgeY = 10 + (headerHeight - 40) / 2;  // Centered vertically
-  ctx.fillStyle = "#FFD700";
-  roundedRect(scoreBadgeX, scoreBadgeY, scoreBadgeWidth, 40, 20);
-  ctx.fill();
-  
-  // Draw "Items recycled" text - left-aligned with padding
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "left";
-  ctx.fillText(`Items recycled: ${score}`, scoreBadgeX + 15, scoreBadgeY + 25);
-  
-  // Draw info button (circular icon) - positioned to the left of score badge
-  const infoButtonX = scoreBadgeX - 35;  // 15px spacing from score badge
-  const infoButtonY = 10 + headerHeight / 2;  // Centered vertically
-  const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
-  
-  ctx.fillStyle = "#2196F3";
-  ctx.beginPath();
-  ctx.arc(infoButtonX, infoButtonY, infoButtonRadius, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Draw "i" icon
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial"; // Scaled down font
-  ctx.textAlign = "center";
-  ctx.fillText("i", infoButtonX, infoButtonY + 4); // Adjusted vertical offset
-  ctx.textAlign = "left";
+  // Only draw header if animation progress > 0
+  if (headerAnimationProgress > 0) {
+    ctx.save();
+    ctx.globalAlpha = headerAlpha;
+    
+    // Draw header background with animated height and position
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    roundedRect(10, animatedY, canvas.width - 20, animatedHeight, 15);
+    ctx.fill();
+    
+    // Only draw header content if height is sufficient
+    if (animatedHeight > 5) {
+      // Draw location text (left side) - larger font
+      ctx.fillStyle = "#666";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "left";
+      ctx.fillText(gameLocation, 35, animatedY + animatedHeight / 2 + 5);  // Moved 10px right from 25
+      
+      // Draw Leaderboard button (moved left after removing level)
+      const leaderboardBtnX = 210;  // Moved 10px right from 200
+      const leaderboardBtnY = animatedY + (animatedHeight - 30) / 2;  // Centered vertically
+      const leaderboardBtnWidth = 120;  // Wider for larger text
+      const leaderboardBtnHeight = 30;
+      ctx.fillStyle = showLeaderboard ? "#4CAF50" : "rgba(255, 255, 255, 0.9)";
+      roundedRect(leaderboardBtnX, leaderboardBtnY, leaderboardBtnWidth, leaderboardBtnHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = showLeaderboard ? "#FFFFFF" : "#2D3748";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Leaderboard", leaderboardBtnX + leaderboardBtnWidth / 2, leaderboardBtnY + leaderboardBtnHeight / 2 + 5);
+      ctx.textAlign = "left";
+      
+      // Draw PvP button (moved left after removing level)
+      const pvpBtnX = 350;  // Moved 10px right from 340
+      const pvpBtnY = animatedY + (animatedHeight - 30) / 2;  // Centered vertically
+      const pvpBtnWidth = 70;
+      const pvpBtnHeight = 30;
+      ctx.fillStyle = showPvP ? "#2196F3" : "rgba(255, 255, 255, 0.9)";
+      roundedRect(pvpBtnX, pvpBtnY, pvpBtnWidth, pvpBtnHeight, 8);
+      ctx.fill();
+      ctx.fillStyle = showPvP ? "#FFFFFF" : "#2D3748";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("PvP", pvpBtnX + pvpBtnWidth / 2, pvpBtnY + pvpBtnHeight / 2 + 5);
+      ctx.textAlign = "left";
+      
+      // Draw score badge (right side) - larger to fit "Items recycled: X"
+      const scoreBadgeWidth = 200;  // Reduced by 20px from 220
+      const scoreBadgeX = canvas.width - scoreBadgeWidth - 15;  // 15px from right edge
+      const scoreBadgeY = animatedY + (animatedHeight - 40) / 2;  // Centered vertically
+      ctx.fillStyle = "#FFD700";
+      roundedRect(scoreBadgeX, scoreBadgeY, scoreBadgeWidth, 40, 20);
+      ctx.fill();
+      
+      // Draw "Items recycled" text - left-aligned with padding
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+      ctx.textAlign = "left";
+      ctx.fillText(`Items recycled: ${score}`, scoreBadgeX + 15, scoreBadgeY + 25);
+      
+      // Draw info button (circular icon) - positioned to the left of score badge
+      const infoButtonX = scoreBadgeX - 35;  // 15px spacing from score badge
+      const infoButtonY = animatedY + animatedHeight / 2;  // Centered vertically
+      const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
+      
+      ctx.fillStyle = "#2196F3";
+      ctx.beginPath();
+      ctx.arc(infoButtonX, infoButtonY, infoButtonRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw "i" icon
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 14px 'Comic Sans MS', 'Trebuchet MS', Arial"; // Scaled down font
+      ctx.textAlign = "center";
+      ctx.fillText("i", infoButtonX, infoButtonY + 4); // Adjusted vertical offset
+      ctx.textAlign = "left";
+    }
+    
+    ctx.restore();
+  }
   
   // Removed feedback message - using visual animations instead
   // (bin bounce for correct, bin shake + screen shake for incorrect)
