@@ -103,7 +103,7 @@ let currentItem = null;
 let currentItemImage = null; // Store the selected image variant for current item
 let itemX = 0;
 let itemY = 0;
-let itemSpeedY = 0.5;
+let itemSpeedY = 0.75;  // 1.5x faster (was 0.5)
 let itemSpeedX = 0;
 let itemWidth = 187.5;  // Scaled up 1.25x from 150
 let itemHeight = 150;  // Scaled up 1.25x from 120
@@ -127,7 +127,7 @@ let isTransitioning = false;  // Flag to prevent updates during phase transition
 // Game progression
 let level = 1;
 let correctItemsThisLevel = 0;  // Track correct items recycled for current level
-let baseSpeedY = 0.5;  // Base falling speed
+let baseSpeedY = 0.75;  // Base falling speed (1.5x faster, was 0.5)
 let gameOver = false;
 let gameOverMessage = "";
 let gamePaused = false;  // Pause state
@@ -154,6 +154,8 @@ let showNewItemsPopup = false;  // Show popup when new items are unlocked
 // Trash pile system
 let trashPileHeight = 0;  // Height of trash pile (0-100, game ends at 100)
 const maxTrashPileHeight = 100;
+let trashBarTimer = 0;  // Timer for showing trash bar (0 = hidden)
+const trashBarDuration = 180;  // Show for 3 seconds (180 frames at 60fps)
 
 // Contamination tracking
 let greenBinContaminated = false;
@@ -163,12 +165,15 @@ let contaminationCounts = {};  // Track contamination count per bin category: { 
 let contaminatedBins = new Set();  // Track which bins are contaminated (by category: "green", "orange")
 let hasSeenContaminationPopup = false;  // Track if user has seen contamination explanation popup
 let showContaminationPopup = false;  // Show contamination popup on first contamination
+let contaminationStartTimes = {};  // Track when each bin was contaminated (frame count): { "green": 500, "orange": 1200 }
+const decontaminationPromptDelay = 300;  // Show prompt 5 seconds after contamination (300 frames at 60fps)
+const decontaminationPromptDuration = 600;  // Show prompt for 10 seconds total (600 frames at 60fps)
 
 // Decontamination mini-game
 let decontaminationActive = false;  // Is decontamination game active
 let decontaminationBinCategory = null;  // Which bin category is being decontaminated
 let decontaminationBinX = 0;  // X position of bin in decontamination game
-let decontaminationBinWidth = 120;  // Width of bin in decontamination game
+let decontaminationBinWidth = 180;  // Width of bin in decontamination game (scaled 1.5x from 120)
 let decontaminationBinY = 0;  // Y position of bin (at bottom)
 let decontaminationItems = [];  // Array of items falling in decontamination game
 let decontaminationItemSpeed = 3;  // Speed of items falling
@@ -181,6 +186,13 @@ let decontaminationWrongCount = 0;  // Count of wrong items collected
 let decontaminationMaxWrong = 3;  // 3 wrong items = fail
 let decontaminationCooldowns = {};  // Track cooldown timers per bin category: { "green": 1800 }
 const decontaminationCooldownDuration = 1800;  // 30 seconds at 60fps
+let showDecontaminationTutorial = false;  // Show tutorial panel for decontamination game
+let showDecontaminationResult = false;  // Show result popup after decontamination game
+let decontaminationResultSuccess = false;  // Whether decontamination was successful
+let decontaminationBinBounceTimer = 0;  // Timer for bin bounce animation (correct answer)
+let decontaminationBinBounceDuration = 40; // frames
+let decontaminationBinShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
+let decontaminationBinShakeDuration = 30; // frames
 
 // Fake leaderboard and PvP
 let showLeaderboard = false;
@@ -205,6 +217,36 @@ const tutorialSteps = [
     action: null
   },
   {
+    title: "The Recycling Bins",
+    text: "You'll see three colored bins at the bottom:\n• GREEN = Widely recyclable\n• ORANGE = Special dropoff needed\n• RED = Not recyclable curbside",
+    highlight: { type: "bins", x: 0, y: canvas.height - 150, width: canvas.width, height: 150 },
+    action: null
+  },
+  {
+    title: "Green Bin = Curbside Pickup",
+    text: "Items in the GREEN bin can be picked up at your curb! These are codes #1 and #2 - the most common recyclable plastics.",
+    highlight: { type: "bin", binIndex: 0, x: 0, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "Orange Bin = Special Dropoff",
+    text: "Items in the ORANGE bin need special dropoff locations. Don't put them in curbside recycling - they can contaminate the stream!",
+    highlight: { type: "bin", binIndex: 1, x: canvas.width / 3, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "Red Bin = Not Recyclable",
+    text: "Items in the RED bin are NOT accepted in curbside recycling. These should go in regular trash, not recycling bins!",
+    highlight: { type: "bin", binIndex: 2, x: (canvas.width / 3) * 2, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
+    action: null
+  },
+  {
+    title: "The Falling Item",
+    text: "Items will fall from the top. Your goal is to sort them into the correct bin!",
+    highlight: { type: "item", x: canvas.width / 2 - 75, y: 175, width: 150, height: 120 },
+    action: null
+  },
+  {
     title: "Your Location",
     text: "This shows where you're playing. Recycling rules can vary by location!",
     highlight: { type: "location", x: 25, y: 28, width: 150, height: 20 },
@@ -214,18 +256,6 @@ const tutorialSteps = [
     title: "Your Score",
     text: "Every time you recycle correctly, you earn points! Try to get as many as you can!",
     highlight: { type: "score", x: canvas.width - 140, y: 15, width: 120, height: 40 },
-    action: null
-  },
-  {
-    title: "The Recycling Bins",
-    text: "You'll see three colored bins at the bottom:\n• GREEN = Widely recyclable\n• ORANGE = Special dropoff needed\n• RED = Not recyclable curbside",
-    highlight: { type: "bins", x: 0, y: canvas.height - 150, width: canvas.width, height: 150 },
-    action: null
-  },
-  {
-    title: "The Falling Item",
-    text: "Items will fall from the top. Your goal is to sort them into the correct bin!",
-    highlight: { type: "item", x: canvas.width / 2 - 75, y: 175, width: 150, height: 120 },
     action: null
   },
   {
@@ -259,26 +289,8 @@ const tutorialSteps = [
     ]
   },
   {
-    title: "Green Bin = Curbside Pickup",
-    text: "Items in the GREEN bin can be picked up at your curb! These are codes #1 and #2 - the most common recyclable plastics.",
-    highlight: { type: "bin", binIndex: 0, x: 0, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
-    action: null
-  },
-  {
-    title: "Orange Bin = Special Dropoff",
-    text: "Items in the ORANGE bin need special dropoff locations. Don't put them in curbside recycling - they can contaminate the stream!",
-    highlight: { type: "bin", binIndex: 1, x: canvas.width / 3, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
-    action: null
-  },
-  {
-    title: "Red Bin = Not Recyclable",
-    text: "Items in the RED bin are NOT accepted in curbside recycling. These should go in regular trash, not recycling bins!",
-    highlight: { type: "bin", binIndex: 2, x: (canvas.width / 3) * 2, y: canvas.height - 140, width: canvas.width / 3, height: 140 },
-    action: null
-  },
-  {
-    title: "Controls",
-    text: "Use ARROW KEYS to move items left and right.\nPress ENTER to drop instantly.\nPress SHIFT to speed up.\nPress SPACE to pause.\nPress X to toggle hints.",
+    title: "Great Job!",
+    text: "You're ready to go! Click \"Play\" to master recycling in Princeton.\n\n As you level up, you'll unlock new items and challenges!",
     highlight: null,
     action: null
   }
@@ -316,6 +328,7 @@ let stopImage = null;  // Stop sign image for contamination indicator
 let handImage = null;  // Hand image
 let correctSound = null;  // Correct sound effect
 let incorrectSound = null;  // Incorrect sound effect
+let oopsSound = null;  // Oops sound effect (when item falls off screen)
 
 // Keyboard state
 const keys = {
@@ -343,6 +356,7 @@ function initGame() {
   loadHandImage();
   loadCorrectSound();
   loadIncorrectSound();
+  loadOopsSound();
   
   // Initialize new items for level 1
   updateNewItemsForLevel();
@@ -362,6 +376,38 @@ function initGame() {
   
   // Add click handler for info button on canvas
   canvas.addEventListener('click', (e) => {
+    // Handle decontamination tutorial dismissal
+    if (showDecontaminationTutorial) {
+      showDecontaminationTutorial = false;
+      localStorage.setItem('hasSeenDecontaminationTutorial', 'true');
+      return;
+    }
+    
+    // Handle decontamination result popup dismissal
+    if (showDecontaminationResult) {
+      showDecontaminationResult = false;
+      
+      // Now actually perform the decontamination or set cooldown
+      if (decontaminationResultSuccess) {
+        // Decontaminate the bin
+        contaminatedBins.delete(decontaminationBinCategory);
+        delete contaminationCounts[decontaminationBinCategory];
+        delete contaminationStartTimes[decontaminationBinCategory];
+        if (decontaminationBinCategory === "green") {
+          greenBinContaminated = false;
+        }
+      } else {
+        // Set cooldown
+        decontaminationCooldowns[decontaminationBinCategory] = decontaminationCooldownDuration;
+      }
+      
+      // End decontamination game
+      decontaminationActive = false;
+      decontaminationBinCategory = null;
+      decontaminationItems = [];
+      return;
+    }
+    
     // Handle new items popup dismissal
     if (showNewItemsPopup) {
       showNewItemsPopup = false;
@@ -748,6 +794,16 @@ function loadIncorrectSound() {
   incorrectSound = audio;
   audio.onerror = () => {
     console.log('Incorrect sound not found');
+  };
+}
+
+function loadOopsSound() {
+  const audio = new Audio('images/oops.mp3');
+  audio.preload = 'auto';
+  audio.volume = 0.4; // Set volume to 40%
+  oopsSound = audio;
+  audio.onerror = () => {
+    console.log('Oops sound not found');
   };
 }
 
@@ -1161,6 +1217,24 @@ function dropIntoBinBelow() {
 // INPUT HANDLING
 // ============================================================================
 window.addEventListener("keydown", (e) => {
+  // Handle decontamination tutorial toggle with 't' key (when in decontamination game)
+  if (decontaminationActive && (e.key === "t" || e.key === "T")) {
+    e.preventDefault();
+    showDecontaminationTutorial = !showDecontaminationTutorial;
+    // Don't set localStorage when toggling, so user can toggle it on/off freely
+    return;
+  }
+  
+  // Handle decontamination tutorial dismissal (any key except 't' which is handled above)
+  if (showDecontaminationTutorial) {
+    e.preventDefault();
+    showDecontaminationTutorial = false;
+    localStorage.setItem('hasSeenDecontaminationTutorial', 'true');
+    return;
+  }
+  
+  // Note: decontamination result popup can only be dismissed by clicking, not by key press
+  
   // Handle new items popup dismissal
   if (showNewItemsPopup) {
     e.preventDefault();
@@ -1405,6 +1479,11 @@ function update() {
     }
   }
   
+  // Update trash bar timer
+  if (trashBarTimer > 0) {
+    trashBarTimer--;
+  }
+  
   // Update bin bounce animation (correct answer)
   if (binBounceTimer > 0) {
     binBounceTimer--;
@@ -1511,6 +1590,11 @@ function update() {
   if (itemY > canvas.height) {
       if (!tutorialActive) {
     addToTrashPile();
+    // Play oops sound when item doesn't go in any bin
+    if (soundEnabled && oopsSound) {
+      oopsSound.currentTime = 0; // Reset to start
+      oopsSound.play().catch(err => console.log('Could not play oops sound:', err));
+    }
       }
     resetItem();
   }
@@ -1626,6 +1710,8 @@ function checkBinCollision() {
               
               // Mark this bin as contaminated
               contaminatedBins.add(bin.category);
+              // Track when this bin was contaminated (using animationFrame as frame counter)
+              contaminationStartTimes[bin.category] = animationFrame;
               if (bin.category === "green") {
             greenBinContaminated = true;
             contaminationTimer = contaminationDuration;
@@ -1782,7 +1868,8 @@ function resetItem() {
 
 // Add to trash pile when item is missed or incorrectly sorted
 function addToTrashPile() {
-  trashPileHeight += 5;  // Add 5% to trash pile
+  trashPileHeight += 20;  // Add 20% to trash pile (5 trash = game over)
+  trashBarTimer = trashBarDuration;  // Show trash bar for 3 seconds
   if (trashPileHeight >= maxTrashPileHeight) {
     endGame(false);  // Game over - lose
   }
@@ -1907,15 +1994,37 @@ function startDecontaminationGame(category) {
   decontaminationActive = true;
   decontaminationBinCategory = category;
   decontaminationBinX = canvas.width / 2 - decontaminationBinWidth / 2;
-  decontaminationBinY = canvas.height - 100;
+  decontaminationBinY = canvas.height - 150;  // Adjusted for larger bin (was -100)
   decontaminationItems = [];
   decontaminationSpawnTimer = 0;
   decontaminationSpawnOffset = 0; // Reset spawn offset
   decontaminationCorrectCount = 0;
   decontaminationWrongCount = 0;
+  showDecontaminationResult = false;  // Reset result popup
+  
+  // Check if tutorial should be shown (first time only)
+  const hasSeenDecontaminationTutorial = localStorage.getItem('hasSeenDecontaminationTutorial');
+  if (hasSeenDecontaminationTutorial !== 'true') {
+    showDecontaminationTutorial = true;
+  } else {
+    showDecontaminationTutorial = false;
+  }
 }
 
 function updateDecontaminationGame() {
+  // Don't update game if tutorial or result popup is showing
+  if (showDecontaminationTutorial || showDecontaminationResult) {
+    return;
+  }
+  
+  // Update bin animation timers
+  if (decontaminationBinBounceTimer > 0) {
+    decontaminationBinBounceTimer--;
+  }
+  if (decontaminationBinShakeTimer > 0) {
+    decontaminationBinShakeTimer--;
+  }
+  
   // Move bin left/right
   const moveSpeed = 5;
   if (keys.left) {
@@ -1944,16 +2053,17 @@ function updateDecontaminationGame() {
       itemImage = Array.isArray(itemImageData) ? itemImageData[0] : itemImageData;
     }
     
-    // Spawn from left or right side randomly
+    // Spawn from left or right edge of screen
     const spawnFromLeft = Math.random() < 0.5;
-    const startX = spawnFromLeft ? -80 : canvas.width;
+    const itemWidth = 120;  // Scaled item width
+    const startX = spawnFromLeft ? -itemWidth : canvas.width;  // Spawn from edges
     const startY = 50 + decontaminationSpawnOffset; // Start from top with offset
     
     // Calculate arc trajectory with randomized target point
-    // All items must land in the middle 2 quadrants (25% to 75% of screen width)
-    const minTargetX = canvas.width * 0.25; // 25% from left
-    const maxTargetX = canvas.width * 0.75; // 75% from left
-    const targetX = minTargetX + Math.random() * (maxTargetX - minTargetX);
+    // All items MUST land in the middle 60% of screen (20% to 80% of screen width)
+    const landingZoneLeft = canvas.width * 0.2;  // 20% from left
+    const landingZoneRight = canvas.width * 0.8;  // 80% from left
+    const targetX = landingZoneLeft + Math.random() * (landingZoneRight - landingZoneLeft);
     // Vary target Y position (some higher, some lower)
     const targetYVariation = (Math.random() - 0.5) * 100; // ±50px variation
     const targetY = canvas.height - 50 + targetYVariation;
@@ -1980,8 +2090,8 @@ function updateDecontaminationGame() {
       item: randomItem,
       x: startX,
       y: startY,
-      width: 80,
-      height: 80,
+      width: 120,  // Scaled 1.5x from 80
+      height: 120,  // Scaled 1.5x from 80
       image: itemImage,
       isCorrect: isCorrect,
       velocityX: velocityX,
@@ -2003,7 +2113,7 @@ function updateDecontaminationGame() {
     item.velocityY += item.gravity; // Apply gravity for arc motion
     
     // Check collision with bin
-    const binHeight = 80; // Medium height for decontamination game
+    const binHeight = 120; // Scaled 1.5x from 80
     if (item.y + item.height >= decontaminationBinY && 
         item.y <= decontaminationBinY + binHeight &&
         item.x + item.width >= decontaminationBinX &&
@@ -2011,8 +2121,26 @@ function updateDecontaminationGame() {
       // Item collected!
       if (item.isCorrect) {
         decontaminationCorrectCount++;
+        
+        // Play correct sound
+        if (soundEnabled && correctSound) {
+          correctSound.currentTime = 0; // Reset to start
+          correctSound.play().catch(err => console.log('Could not play correct sound:', err));
+        }
+        
+        // Start bin bounce animation
+        decontaminationBinBounceTimer = decontaminationBinBounceDuration;
       } else {
         decontaminationWrongCount++;
+        
+        // Play incorrect sound
+        if (soundEnabled && incorrectSound) {
+          incorrectSound.currentTime = 0; // Reset to start
+          incorrectSound.play().catch(err => console.log('Could not play incorrect sound:', err));
+        }
+        
+        // Start bin shake animation
+        decontaminationBinShakeTimer = decontaminationBinShakeDuration;
       }
       decontaminationItems.splice(i, 1);
       
@@ -2028,29 +2156,20 @@ function updateDecontaminationGame() {
     }
     
     // Remove items that fall off screen (check both sides and bottom)
-    if (item.y > canvas.height || (item.velocityX > 0 && item.x > canvas.width) || (item.velocityX < 0 && item.x < -80)) {
+    // Items are removed when they hit the bottom or go off the sides
+    if (item.y > canvas.height || (item.velocityX > 0 && item.x > canvas.width) || (item.velocityX < 0 && item.x + item.width < 0)) {
       decontaminationItems.splice(i, 1);
     }
   }
 }
 
 function endDecontaminationGame(success) {
-  decontaminationActive = false;
+  // Show result popup instead of immediately ending
+  showDecontaminationResult = true;
+  decontaminationResultSuccess = success;
   
-  if (success) {
-    // Decontaminate the bin
-    contaminatedBins.delete(decontaminationBinCategory);
-    delete contaminationCounts[decontaminationBinCategory];
-    if (decontaminationBinCategory === "green") {
-      greenBinContaminated = false;
-    }
-  } else {
-    // Set cooldown
-    decontaminationCooldowns[decontaminationBinCategory] = decontaminationCooldownDuration;
-  }
-  
-  decontaminationBinCategory = null;
-  decontaminationItems = [];
+  // Don't decontaminate yet - wait for popup dismissal
+  // The actual decontamination will happen when popup is dismissed
 }
 
 function renderDecontaminationGame() {
@@ -2075,20 +2194,57 @@ function renderDecontaminationGame() {
   ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
   ctx.fillText("asdf ", canvas.width / 2, 90);
   
-  // Draw progress
-  ctx.fillStyle = "#4CAF50";
-  ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
-  ctx.textAlign = "left";
-  ctx.fillText(`Correct: ${decontaminationCorrectCount}/${decontaminationRequiredCorrect}`, 20, canvas.height - 60);
+  // Draw progress (only if not showing tutorial or result popup)
+  if (!showDecontaminationTutorial && !showDecontaminationResult) {
+    ctx.fillStyle = "#4CAF50";
+    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(`Correct: ${decontaminationCorrectCount}/${decontaminationRequiredCorrect}`, 20, canvas.height - 60);
+    
+    ctx.fillStyle = "#F44336";
+    ctx.fillText(`Wrong: ${decontaminationWrongCount}/${decontaminationMaxWrong}`, 20, canvas.height - 30);
+  }
   
-  ctx.fillStyle = "#F44336";
-  ctx.fillText(`Wrong: ${decontaminationWrongCount}/${decontaminationMaxWrong}`, 20, canvas.height - 30);
+  // Draw bin using green.png image (scaled 1.5x for decontamination game)
+  const binHeight = 120; // Scaled 1.5x from 80
   
-  // Draw bin using green.png image (smaller size for decontamination game)
-  const binHeight = 80; // Medium height for decontamination game
-  if (greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) {
-    // Scale image by 1.5x while maintaining aspect ratio (smaller than main game's 2x)
-    const imgAspectRatio = greenBinImage.width / greenBinImage.height;
+  // Calculate animation offsets
+  let offsetX = 0;
+  let offsetY = 0;
+  
+  // Bin bounce animation (correct answer) - smooth up and down motion
+  if (decontaminationBinBounceTimer > 0) {
+    const progress = 1 - (decontaminationBinBounceTimer / decontaminationBinBounceDuration);
+    // Bounce effect: goes up then down with easing
+    const bounceHeight = 15 * Math.sin(progress * Math.PI);
+    offsetY = -bounceHeight;
+  }
+  
+  // Bin shake animation (incorrect answer) - rapid horizontal movement
+  if (decontaminationBinShakeTimer > 0) {
+    const shakeAmount = 5;
+    // Rapid random shake
+    offsetX = (Math.random() - 0.5) * shakeAmount * 2;
+    offsetY = (Math.random() - 0.5) * shakeAmount;
+  }
+  
+  // Apply offsets to bin position
+  const binX = decontaminationBinX + offsetX;
+  const binY = decontaminationBinY + offsetY;
+  
+  // Determine which bin image to use based on category
+  let binImage = null;
+  if (decontaminationBinCategory === "green" && greenBinImage && greenBinImage.complete && greenBinImage.naturalWidth > 0) {
+    binImage = greenBinImage;
+  } else if (decontaminationBinCategory === "orange" && yellowBinImage && yellowBinImage.complete && yellowBinImage.naturalWidth > 0) {
+    binImage = yellowBinImage;
+  } else if (decontaminationBinCategory === "red" && redBinImage && redBinImage.complete && redBinImage.naturalWidth > 0) {
+    binImage = redBinImage;
+  }
+  
+  if (binImage) {
+    // Scale image by 1.5x while maintaining aspect ratio
+    const imgAspectRatio = binImage.width / binImage.height;
     const baseWidth = decontaminationBinWidth * 1.5;
     const baseHeight = binHeight * 1.5;
     
@@ -2105,48 +2261,155 @@ function renderDecontaminationGame() {
       drawWidth = baseHeight * imgAspectRatio;
     }
     
-    // Center the scaled image
-    const drawX = decontaminationBinX + (decontaminationBinWidth - drawWidth) / 2;
-    const drawY = decontaminationBinY + (binHeight - drawHeight) / 2;
+    // Center the scaled image (with animation offsets)
+    const drawX = binX + (decontaminationBinWidth - drawWidth) / 2;
+    const drawY = binY + (binHeight - drawHeight) / 2;
     
     // Draw the bin image
-    ctx.drawImage(greenBinImage, drawX, drawY, drawWidth, drawHeight);
+    ctx.drawImage(binImage, drawX, drawY, drawWidth, drawHeight);
   } else {
-    // Fallback to drawn bin if image not loaded
+    // Fallback to drawn bin if image not loaded (with animation offsets)
     const binColor = decontaminationBinCategory === "green" ? "#4CAF50" : 
                      decontaminationBinCategory === "orange" ? "#FF9800" : "#F44336";
     ctx.fillStyle = binColor;
-    roundedRect(decontaminationBinX, decontaminationBinY, decontaminationBinWidth, binHeight, 8);
+    roundedRect(binX, binY, decontaminationBinWidth, binHeight, 8);
     ctx.fill();
     ctx.strokeStyle = "#FFFFFF";
     ctx.lineWidth = 3;
-    roundedRect(decontaminationBinX, decontaminationBinY, decontaminationBinWidth, binHeight, 8);
+    roundedRect(binX, binY, decontaminationBinWidth, binHeight, 8);
     ctx.stroke();
   }
   
-  // Draw falling items
-  decontaminationItems.forEach(item => {
-    if (item.image && item.image.complete && item.image.naturalWidth > 0) {
-      const imgAspectRatio = item.image.width / item.image.height;
-      let drawWidth = item.width;
-      let drawHeight = item.height;
-      
-      if (imgAspectRatio > 1) {
-        drawHeight = item.width / imgAspectRatio;
+  // Draw falling items (only if not showing tutorial or result popup)
+  if (!showDecontaminationTutorial && !showDecontaminationResult) {
+    decontaminationItems.forEach(item => {
+      if (item.image && item.image.complete && item.image.naturalWidth > 0) {
+        const imgAspectRatio = item.image.width / item.image.height;
+        let drawWidth = item.width;
+        let drawHeight = item.height;
+        
+        if (imgAspectRatio > 1) {
+          drawHeight = item.width / imgAspectRatio;
+        } else {
+          drawWidth = item.height * imgAspectRatio;
+        }
+        
+        const drawX = item.x + (item.width - drawWidth) / 2;
+        const drawY = item.y + (item.height - drawHeight) / 2;
+        
+        ctx.drawImage(item.image, drawX, drawY, drawWidth, drawHeight);
       } else {
-        drawWidth = item.height * imgAspectRatio;
+        // Fallback rectangle
+        ctx.fillStyle = item.isCorrect ? "#4CAF50" : "#F44336";
+        ctx.fillRect(item.x, item.y, item.width, item.height);
       }
-      
-      const drawX = item.x + (item.width - drawWidth) / 2;
-      const drawY = item.y + (item.height - drawHeight) / 2;
-      
-      ctx.drawImage(item.image, drawX, drawY, drawWidth, drawHeight);
-    } else {
-      // Fallback rectangle
-      ctx.fillStyle = item.isCorrect ? "#4CAF50" : "#F44336";
-      ctx.fillRect(item.x, item.y, item.width, item.height);
-    }
-  });
+    });
+  }
+  
+  // Draw tutorial panel
+  if (showDecontaminationTutorial) {
+    // Draw dark overlay
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw panel
+    const panelWidth = 700;
+    const panelHeight = 350;
+    const panelX = (canvas.width - panelWidth) / 2;
+    const panelY = (canvas.height - panelHeight) / 2;
+    
+    // Panel background
+    ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+    roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+    ctx.fill();
+    
+    // Panel border
+    ctx.strokeStyle = "#4CAF50";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    
+    // Title
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    const categoryName = decontaminationBinCategory.charAt(0).toUpperCase() + decontaminationBinCategory.slice(1);
+    ctx.fillText(`Decontaminate ${categoryName} bin!`, panelX + panelWidth / 2, panelY + 50);
+    
+    // Text
+    ctx.fillStyle = "#4A5568";
+    ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "left";
+    const textLines = [
+      "Move the bin using L, R arrow keys to catch plastic items that should go into the bin, and dodge items that shouldn't!",
+      "",
+      "Get 5 correct items to decontaminate your bin!"
+    ];
+    let textY = panelY + 100;
+    const lineHeight = 26;
+    const textPadding = 40;
+    textLines.forEach(line => {
+      const wrappedLines = wrapText(ctx, line, panelWidth - (textPadding * 2), 18);
+      wrappedLines.forEach(wrappedLine => {
+        ctx.fillText(wrappedLine, panelX + textPadding, textY);
+        textY += lineHeight;
+      });
+    });
+    
+    // Click to continue hint
+    ctx.fillStyle = "#999";
+    ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Click anywhere to continue", panelX + panelWidth / 2, panelY + panelHeight - 30);
+  }
+  
+  // Draw result popup
+  if (showDecontaminationResult) {
+    // Draw dark overlay
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw panel
+    const panelWidth = 700;
+    const panelHeight = 300;
+    const panelX = (canvas.width - panelWidth) / 2;
+    const panelY = (canvas.height - panelHeight) / 2;
+    
+    // Panel background
+    ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+    roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+    ctx.fill();
+    
+    // Panel border (green for success, red for failure)
+    ctx.strokeStyle = decontaminationResultSuccess ? "#4CAF50" : "#F44336";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    
+    // Title
+    ctx.fillStyle = "#2D3748";
+    ctx.font = "bold 28px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    const titleText = decontaminationResultSuccess ? "Congratulations!" : "Oops!";
+    ctx.fillText(titleText, panelX + panelWidth / 2, panelY + 50);
+    
+    // Message
+    ctx.fillStyle = "#4A5568";
+    ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.textAlign = "center";
+    const categoryName = decontaminationBinCategory.charAt(0).toUpperCase() + decontaminationBinCategory.slice(1);
+    const messageText = decontaminationResultSuccess 
+      ? `You successfully decontaminated the ${categoryName} bin!`
+      : `You failed to decontaminate the ${categoryName} bin...`;
+    const messageY = panelY + 120;
+    const messageLines = wrapText(ctx, messageText, panelWidth - 80, 18);
+    messageLines.forEach((line, index) => {
+      ctx.fillText(line, panelX + panelWidth / 2, messageY + (index * 26));
+    });
+    
+    // Click to continue hint
+    ctx.fillStyle = "#999";
+    ctx.font = "16px 'Comic Sans MS', 'Trebuchet MS', Arial";
+    ctx.fillText("Click anywhere to continue", panelX + panelWidth / 2, panelY + panelHeight - 30);
+  }
   
   ctx.textAlign = "left";
 }
@@ -2973,13 +3236,26 @@ function render() {
   // Don't draw item during transitions
   if (currentItem && !isTransitioning) {
     let shouldDrawItem = true;
-    if (bins.length > 0) {
-      const binTop = bins[0].y;
+    if (bins.length > 0 && hasCollided) {
+      // Only hide item if it's actually inside a bin AND gone too deep
+      const itemCenterX = itemX + itemWidth / 2;
       const itemBottom = itemY + itemHeight;
-      // Only hide item if it's gone too deep (more than 60 pixels into bin)
-      if (itemBottom > binTop + 60) {
-        shouldDrawItem = false;
+      
+      // Check if item is horizontally aligned with any bin
+      let isOverBin = false;
+      for (let i = 0; i < bins.length; i++) {
+        const bin = bins[i];
+        if (itemCenterX >= bin.x && itemCenterX <= bin.x + bin.width) {
+          isOverBin = true;
+          // Only hide if it's gone more than 60 pixels deep into THIS bin
+          if (itemBottom > bin.y + 60) {
+            shouldDrawItem = false;
+          }
+          break;
+        }
       }
+      // If item is not over any bin, always show it (even if it's past bin height)
+      // This allows items that miss bins to be visible all the way down
     }
     
     // Draw item if it should be visible
@@ -3006,12 +3282,29 @@ function render() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   
-  // Draw trash percentage in bottom left corner
-  if (!tutorialActive && !decontaminationActive) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    ctx.font = "bold 20px 'Comic Sans MS', 'Trebuchet MS', Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(`Trash: ${Math.round(trashPileHeight)}%`, 15, canvas.height - 15);
+  // Draw trash bar on left side (only when trash increments, shows for 3 seconds)
+  if (trashBarTimer > 0 && !tutorialActive && !decontaminationActive) {
+    const barWidth = 20;
+    const barX = 10;
+    const barHeight = canvas.height - 200;  // Leave space at top and bottom
+    const barY = 100;
+    const fillHeight = (trashPileHeight / maxTrashPileHeight) * barHeight;
+    
+    // Draw background bar
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    
+    // Draw filled portion (brown gradient - trash is brown!)
+    const gradient = ctx.createLinearGradient(barX, barY + barHeight - fillHeight, barX, barY + barHeight);
+    gradient.addColorStop(0, "#8B6F47");  // Brown at top
+    gradient.addColorStop(1, "#6B4423");  // Darker brown at bottom
+    ctx.fillStyle = gradient;
+    ctx.fillRect(barX, barY + barHeight - fillHeight, barWidth, fillHeight);
+    
+    // Draw border
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
   }
   
   // Draw fake leaderboard if shown
@@ -3042,7 +3335,10 @@ function render() {
     ctx.textAlign = "left";
   }
   
-  // Game over screen removed - game just continues
+  // Draw game over screen
+  if (gameOver) {
+    drawGameOverScreen();
+  }
   
   // Draw question mark help button (only if tutorial not active)
   if (!tutorialActive) {
@@ -3303,7 +3599,43 @@ function drawFakePvP() {
   ctx.textAlign = "left";
 }
 
-// Game over screen function removed - game continues without popup
+function drawGameOverScreen() {
+  // Dark overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Game over panel
+  const panelX = canvas.width / 2 - 250;
+  const panelY = canvas.height / 2 - 100;
+  const panelWidth = 500;
+  const panelHeight = 200;
+  
+  ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.fill();
+  
+  ctx.strokeStyle = "#F44336";
+  ctx.lineWidth = 4;
+  roundedRect(panelX, panelY, panelWidth, panelHeight, 20);
+  ctx.stroke();
+  
+  // Message (handle multiple lines)
+  ctx.fillStyle = "#2D3748";
+  ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.textAlign = "center";
+  const messageLines = gameOverMessage.split('\n');
+  let messageY = panelY + 60;
+  messageLines.forEach(line => {
+    ctx.fillText(line, panelX + panelWidth / 2, messageY);
+    messageY += 30;
+  });
+  
+  ctx.font = "18px 'Comic Sans MS', 'Trebuchet MS', Arial";
+  ctx.fillText(`Items recycled: ${score}`, panelX + panelWidth / 2, panelY + 120);
+  ctx.fillText("Press R to restart", panelX + panelWidth / 2, panelY + 160);
+  
+  ctx.textAlign = "left";
+}
 
 function drawClouds() {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
@@ -3587,6 +3919,27 @@ function drawBin(bin, binIndex) {
         const stopX = centerX - stopSize / 2 + 5; // Moved right 5px (was +3, now +5)
         const stopY = binY - 120; // Moved up 30px more from -90 to -120
         ctx.drawImage(stopImage, stopX, stopY, stopSize, stopSize);
+        
+        // Draw "click to decontaminate!" text above stop.png after 5 seconds, for 10 seconds total
+        if (contaminationStartTimes[bin.category] !== undefined) {
+          const framesSinceContamination = animationFrame - contaminationStartTimes[bin.category];
+          if (framesSinceContamination >= decontaminationPromptDelay && 
+              framesSinceContamination < decontaminationPromptDelay + decontaminationPromptDuration) {
+            ctx.fillStyle = "#FFD700";  // Gold/blinding color
+            ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+            ctx.textAlign = "center";
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 3;
+            const lineHeight = 28;  // Spacing between lines
+            const textY = stopY - 50;  // Above the stop sign (moved up more for two lines)
+            // Draw first line: "click to"
+            ctx.strokeText("click to", centerX, textY);
+            ctx.fillText("click to", centerX, textY);
+            // Draw second line: "decontaminate!"
+            ctx.strokeText("decontaminate!", centerX, textY + lineHeight);
+            ctx.fillText("decontaminate!", centerX, textY + lineHeight);
+          }
+        }
       }
     }
   } else {
@@ -3636,6 +3989,27 @@ function drawBin(bin, binIndex) {
         const stopX = centerX - stopSize / 2 + 5; // Moved right 5px (was +3, now +5)
         const stopY = binY - 120; // Moved up 30px more from -90 to -120
         ctx.drawImage(stopImage, stopX, stopY, stopSize, stopSize);
+        
+        // Draw "click to decontaminate!" text above stop.png after 5 seconds, for 10 seconds total
+        if (contaminationStartTimes[bin.category] !== undefined) {
+          const framesSinceContamination = animationFrame - contaminationStartTimes[bin.category];
+          if (framesSinceContamination >= decontaminationPromptDelay && 
+              framesSinceContamination < decontaminationPromptDelay + decontaminationPromptDuration) {
+            ctx.fillStyle = "#FFD700";  // Gold/blinding color
+            ctx.font = "bold 24px 'Comic Sans MS', 'Trebuchet MS', Arial";
+            ctx.textAlign = "center";
+            ctx.strokeStyle = "#000000";
+            ctx.lineWidth = 3;
+            const lineHeight = 28;  // Spacing between lines
+            const textY = stopY - 50;  // Above the stop sign (moved up more for two lines)
+            // Draw first line: "click to"
+            ctx.strokeText("click to", centerX, textY);
+            ctx.fillText("click to", centerX, textY);
+            // Draw second line: "decontaminate!"
+            ctx.strokeText("decontaminate!", centerX, textY + lineHeight);
+            ctx.fillText("decontaminate!", centerX, textY + lineHeight);
+          }
+        }
       }
     }
   }
