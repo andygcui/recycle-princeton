@@ -2,7 +2,8 @@
 <img width="200" height="300" alt="Screenshot 2025-12-06 at 02 04 49" src="https://github.com/user-attachments/assets/db965664-869c-4d9e-8b3b-fc16ba15dfe4" />
 <img width="200" height="300" alt="Screenshot 2025-12-06 at 02 05 49" src="https://github.com/user-attachments/assets/92564327-fc09-4ae1-b7aa-e57adb1c2524" />
 
-# Recycle Quest
+gameplay demo: https://youtu.be/UewQcdBEVyg
+# recycle quest
 Created for Princeton VIS 216 -- Graphic Design: Visual Form 
 
 
