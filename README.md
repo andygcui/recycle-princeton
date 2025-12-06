@@ -1,6 +1,6 @@
 # Recycle Quest
 
-Created for Princeton VIS 216: Graphic Design. 
+Created for Princeton VIS 216 -- Graphic Design: Visual Form 
 
 
 ## About
