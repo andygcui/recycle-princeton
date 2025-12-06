@@ -1,18 +1,15 @@
 # Recycle Quest
 
-An educational sorting game that teaches children aged 5--8 how to correctly sort common household plastic items based on recycling codes and local recycling rules. Learn about different plastic types, contamination, and proper recycling practices while having fun! Created for Princeton VIS 216: Graphic Design. 
+Created for Princeton VIS 216: Graphic Design. 
 
 
 ## About
 
-Recycle Quest is an interactive educational game designed to teach players about recycling plastics correctly. The game features:
+Recycle Question is an interactive, educational sorting game that teaches children aged 5--8 how to correctly sort common household plastic items based on recycling codes and local recycling rules. Learn about different plastic types, contamination, and proper recycling practices while having fun! The game features:
 
 - **Location-based recycling rules** - Enter your location to learn recycling rules specific to your area
 - **Progressive difficulty** - Start with simple items and unlock more complex plastics as you level up
 - **Educational content** - Learn about plastic codes (#1-7) and which bins they belong in
-- **Contamination system** - Understand how wrong items can contaminate recycling bins
-- **Decontamination minigame** - Clean contaminated bins in a fun side game
-- **Tutorial system** - Comprehensive tutorial for first-time players
 - **Sound effects and music** - Immersive audio experience
 
 ## Gameplay
@@ -130,32 +127,6 @@ recycle-princeton/
 - Background music that loops during gameplay
 - Special music for decontamination minigame
 - Sound effects for correct/incorrect answers and mistakes
-
-## Learning Objectives
-
-Players will learn:
-- How to identify plastic recycling codes (#1-7)
-- Which plastics are widely recyclable vs. need special dropoff
-- Which plastics cannot be recycled curbside
-- How contamination affects recycling streams
-- Location-specific recycling rules
-
-## Technologies Used
-
-- **HTML5 Canvas** - Game rendering
-- **JavaScript** - Game logic and mechanics
-- **CSS** - Styling and layout
-- **Web Audio API** - Sound effects and music
-- **LocalStorage** - Save game preferences and progress
-- **Electron** (optional) - Desktop app wrapper
-
-## Notes
-
-- The game is designed for educational purposes
-- Recycling rules are simplified for gameplay - always check your local recycling guidelines
-- The game uses Princeton, NJ as the default location but accepts any location input
-- All game progress and settings are stored locally in your browser
-
 
 ## License
 
