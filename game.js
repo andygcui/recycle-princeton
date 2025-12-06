@@ -4,7 +4,7 @@ const ctx = canvas.getContext('2d');
 canvas.width = 768;
 canvas.height = 1024; 
 
-// education styff for the info page
+// for info page
 const CATEGORY_INFO = {
   green: {
     name: "Green - Widely Recyclable",
@@ -36,37 +36,35 @@ const PLASTIC_CODE_INFO = {
   7: { name: "Other/Mixed", recyclable: false, common: "Mixed plastics, bioplastics" }
 };
 
-// ============================================================================
-// GAME DATA - Plastic Items
-// ============================================================================
+// items for game + info
 const ITEMS = [
   {
     name: "Water bottle",
-    code: 1,                // PET
+    code: 1, 
     category: "green",
     description: "Made from PET #1 - widely recyclable!"
   },
   {
     name: "Milk jug",
-    code: 2,                // HDPE
+    code: 2,
     category: "green",
     description: "Made from HDPE #2 - widely recyclable!"
   },
   {
     name: "Plastic bag",
-    code: 4,                // LDPE
+    code: 4,
     category: "orange",
     description: "Made from LDPE #4 - needs special dropoff"
   },
   {
     name: "Yogurt cup",
-    code: 5,                // PP
+    code: 5,
     category: "orange",
     description: "Made from PP #5 - needs special dropoff"
   },
   {
     name: "Styrofoam cup",
-    code: 6,                // PS
+    code: 6,
     category: "red",
     description: "Made from PS #6 - not recyclable curbside"
   },
@@ -84,78 +82,74 @@ const ITEMS = [
   },
   {
     name: "PVC pipe",
-    code: 3,                // PVC
+    code: 3, 
     category: "red",
     description: "Made from PVC #3 - not recyclable curbside"
   },
   {
     name: "Mixed plastic",
-    code: 7,                // Other
+    code: 7,
     category: "red",
     description: "Made from mixed plastic #7 - not recyclable curbside"
   }
 ];
 
-// ============================================================================
-// GAME STATE
-// ============================================================================
+
+// game state
 let currentItem = null;
-let currentItemImage = null; // Store the selected image variant for current item
+let currentItemImage = null;
 let itemX = 0;
 let itemY = 0;
-let itemSpeedY = 0.75;  // 1.5x faster (was 0.5)
+let itemSpeedY = 0.75; 
 let itemSpeedX = 0;
-let itemWidth = 187.5;  // Scaled up 1.25x from 150
-let itemHeight = 150;  // Scaled up 1.25x from 120
+let itemWidth = 187.5;
+let itemHeight = 150; 
 
 let phase = "category";
-let codePhaseCategory = null;  // Track which category we're sorting codes for (green/orange/red)
+let codePhaseCategory = null; 
 let score = 0;
 let message = "";
-let educationalMessage = "";  // Detailed educational message
 let messageTimer = 0;
-let educationalTimer = 0;
 let messageDuration = 180;
-let educationalDuration = 300; // Longer for educational content
 
 let bins = [];
-let showHints = false;  // Show educational hints (default off)
-let gameLocation = "Princeton, NJ";  // Store location for display
-let hasCollided = false;  // Prevent multiple collision checks per item
-let isTransitioning = false;  // Flag to prevent updates during phase transitions
+let showHints = false;
+let gameLocation = "Princeton, NJ";
+let hasCollided = false;
+let isTransitioning = false;
 
 // Game progression
 let level = 1;
-let correctItemsThisLevel = 0;  // Track correct items recycled for current level
-let baseSpeedY = 0.75;  // Base falling speed (1.5x faster, was 0.5)
+let correctItemsThisLevel = 0;
+let baseSpeedY = 0.75;
 let gameOver = false;
 let gameOverMessage = "";
-let gamePaused = false;  // Pause state
-let showHand = true;  // Show hand image (default on)
-let soundEnabled = true;  // Sound effects enabled (default on)
+let gamePaused = false; 
+let showHand = true;
+let soundEnabled = true;
 
 // Level-based item unlocking
 const ITEMS_BY_LEVEL = {
-  1: ["Water bottle"],  // Level 1: Just water bottle
-  2: ["Soda bottle", "PVC pipe"],  // Level 2: Add these 2
-  3: ["Plastic bag", "Milk jug", "Styrofoam cup"],  // Level 3: Add these 3
-  4: ["Detergent bottle", "Yogurt cup", "Mixed plastic"]  // Level 4: Add the rest
+  1: ["Water bottle"], 
+  2: ["Soda bottle", "PVC pipe"],
+  3: ["Plastic bag", "Milk jug", "Styrofoam cup"], 
+  4: ["Detergent bottle", "Yogurt cup", "Mixed plastic"]
 };
 
 // Track which new items have been correctly sorted in current level
-let newItemsSortedThisLevel = new Set();  // Track item names that were correctly sorted
-let newItemsForCurrentLevel = [];  // Items added in current level
-let itemAttempts = 0;  // Track attempts for current item (0 = first try)
-let showHintsOffPopup = false;  // Show popup when hints are turned off
-let hintsOffPopupTimer = 0;  // Timer for hints off popup
-const hintsOffPopupDuration = 300;  // frames to show popup (5 seconds)
-let showNewItemsPopup = false;  // Show popup when new items are unlocked
+let newItemsSortedThisLevel = new Set(); 
+let newItemsForCurrentLevel = []; 
+let itemAttempts = 0; 
+let showHintsOffPopup = false; 
+let hintsOffPopupTimer = 0; 
+const hintsOffPopupDuration = 300;  
+let showNewItemsPopup = false; 
 
 // Trash pile system
-let trashPileHeight = 0;  // Height of trash pile (0-100, game ends at 100)
+let trashPileHeight = 0;
 const maxTrashPileHeight = 100;
-let trashBarTimer = 0;  // Timer for showing trash bar (0 = hidden)
-const trashBarDuration = 180;  // Show for 3 seconds (180 frames at 60fps)
+let trashBarTimer = 0; 
+const trashBarDuration = 180; 
 
 // Contamination tracking
 let greenBinContaminated = false;
@@ -182,13 +176,13 @@ let decontaminationSpawnInterval = 240;  // Frames between item spawns (slower f
 let decontaminationSpawnOffset = 0;  // Vertical offset to reduce spacing between items
 let decontaminationCorrectCount = 0;  // Count of correct items collected
 let decontaminationRequiredCorrect = 5;  // Need 5 correct items to decontaminate
-let decontaminationWrongCount = 0;  // Count of wrong items collected
-let decontaminationMaxWrong = 3;  // 3 wrong items = fail
+let decontaminationWrongCount = 0;
+let decontaminationMaxWrong = 3;
 let decontaminationCooldowns = {};  // Track cooldown timers per bin category: { "green": 1800 }
 const decontaminationCooldownDuration = 1800;  // 30 seconds at 60fps
-let showDecontaminationTutorial = false;  // Show tutorial panel for decontamination game
-let showDecontaminationResult = false;  // Show result popup after decontamination game
-let decontaminationResultSuccess = false;  // Whether decontamination was successful
+let showDecontaminationTutorial = true;
+let showDecontaminationResult = false;
+let decontaminationResultSuccess = false;
 let decontaminationBinBounceTimer = 0;  // Timer for bin bounce animation (correct answer)
 let decontaminationBinBounceDuration = 40; // frames
 let decontaminationBinShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
@@ -1118,18 +1112,8 @@ function pickRandomItem() {
   
   // Reset attempts for new item
   itemAttempts = 0;
-  
-  // Show educational message when new item appears
-  showEducationalContent();
 }
 
-function showEducationalContent() {
-  if (!currentItem) return;
-  
-  // Simple message: "Recycle this [item]!"
-  educationalMessage = `Recycle this ${currentItem.name.toLowerCase()}!`;
-  educationalTimer = educationalDuration;
-}
 
 function setupBins() {
   bins = [];
@@ -1573,11 +1557,6 @@ function update() {
     if (messageTimer === 0) message = "";
   }
   
-  if (educationalTimer > 0) {
-    educationalTimer--;
-    if (educationalTimer === 0) educationalMessage = "";
-  }
-  
   // Update flash effect
   if (flashTimer > 0) {
     flashTimer--;
@@ -1738,8 +1717,6 @@ function checkBinCollision() {
         if (bin.category === currentItem.category) {
           // Correct category!
           const categoryInfo = CATEGORY_INFO[currentItem.category];
-          // Remove text message, keep educational message
-          educationalMessage = `${currentItem.name} goes in the ${bin.label} bin! ${currentItem.description}`;
           
           // Play correct sound
           if (soundEnabled && correctSound) {
@@ -1773,7 +1750,6 @@ function checkBinCollision() {
           
           // All items proceed to Phase 2 (code sorting)
           messageTimer = messageDuration;
-          educationalTimer = educationalDuration;
           
           // Set transition flag to prevent updates
           isTransitioning = true;
@@ -1788,15 +1764,12 @@ function checkBinCollision() {
             itemY = 210; // Start 30px lower (was 180)
             hasCollided = false;  // Reset collision flag for phase transition
             isTransitioning = false;  // End transition
-            showEducationalContent();
           }, bounceDelayMs);
         } else {
           // Wrong bin - teach them!
           itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = CATEGORY_INFO[currentItem.category];
           const wrongInfo = bin.info;
-          // Remove text message, keep educational message
-          educationalMessage = `Hint: ${currentItem.name} is plastic #${currentItem.code}. It goes in the ${currentItem.category} bin! ${correctInfo.description}`;
           
           // Play incorrect sound
           if (soundEnabled && incorrectSound) {
@@ -1858,7 +1831,6 @@ function checkBinCollision() {
               // Don't add to trash pile for contamination
               // Don't reset item here - wait for popup or reset immediately if popup already shown
               messageTimer = messageDuration;
-              educationalTimer = educationalDuration;
               return; // Exit early to prevent normal resetItem() call
             }
             // If recyclable plastic dropped into red/orange bin, add to trash pile
@@ -1870,7 +1842,6 @@ function checkBinCollision() {
           }
           
           messageTimer = messageDuration;
-          educationalTimer = educationalDuration;
           resetItem();
         }
       } else if (phase === "code") {
@@ -1898,9 +1869,6 @@ function checkBinCollision() {
             }
           }
           
-          // Remove text message, keep educational message
-          educationalMessage = `Perfect! ${currentItem.name} is plastic #${currentItem.code} (${codeInfo.name}). ${codeInfo.common}!`;
-          
           // Flash green for correct answer
           flashColor = "green";
           flashTimer = flashDuration;
@@ -1927,7 +1895,6 @@ function checkBinCollision() {
           }
           
           messageTimer = messageDuration;
-          educationalTimer = educationalDuration;
           
           // Wait for bin bounce animation to finish before transitioning back to category phase
           const bounceDelayMs = (binBounceDuration / 60) * 1000;
@@ -1943,9 +1910,7 @@ function checkBinCollision() {
           // Wrong code - teach them!
           itemAttempts++;  // Increment attempts for wrong answer
           const correctInfo = PLASTIC_CODE_INFO[currentItem.code];
-          // Remove text message, keep educational message
-          educationalMessage = `Look at the number on the item! ${currentItem.name} is plastic #${currentItem.code} (${correctInfo.name}). You can do it!`;
-          
+         
           // Play incorrect sound
           if (soundEnabled && incorrectSound) {
             incorrectSound.currentTime = 0; // Reset to start
@@ -1967,7 +1932,6 @@ function checkBinCollision() {
           }
           
           messageTimer = messageDuration;
-          educationalTimer = educationalDuration;
           resetItem();
         }
       }
@@ -2039,9 +2003,7 @@ function restartGame() {
   itemY = 180;
   setupBins();
   message = "";
-  educationalMessage = "";
   messageTimer = 0;
-  educationalTimer = 0;
 }
 
 // Check for level progression - need n correct items AND all new items sorted correctly
