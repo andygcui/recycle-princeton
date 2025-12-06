@@ -4,8 +4,26 @@ const ctx = canvas.getContext('2d');
 canvas.width = 768;
 canvas.height = 1024; 
 
-// for info page
-const CATEGORY_INFO = {
+// Location-based recycling rules
+// Maps location to which plastic codes go in which bins
+const LOCATION_RULES = {
+  "Princeton, NJ": {
+    green: [1, 2],      // #1 PET, #2 HDPE
+    orange: [4, 5],     // #4 LDPE, #5 PP
+    red: [3, 6, 7]      // #3 PVC, #6 PS, #7 Other
+  },
+  "New York, NY": {
+    green: [1, 2, 5],   // #1 PET, #2 HDPE, #5 PP
+    orange: [4],         // #4 LDPE (special dropoff)
+    red: [3, 6, 7]       // #3 PVC, #6 PS, #7 Other
+  }
+};
+
+// Default to Princeton rules
+let currentLocationRules = LOCATION_RULES["Princeton, NJ"];
+
+// for info page - will be updated based on location
+let CATEGORY_INFO = {
   green: {
     name: "Green - Widely Recyclable",
     description: "Accepted in curbside recycling",
@@ -33,11 +51,11 @@ const PLASTIC_CODE_INFO = {
   4: { name: "LDPE (Low-Density Polyethylene)", recyclable: "special", common: "Plastic bags, shrink wrap" },
   5: { name: "PP (Polypropylene)", recyclable: "special", common: "Yogurt cups, bottle caps" },
   6: { name: "PS (Polystyrene)", recyclable: false, common: "Styrofoam, disposable cups" },
-  7: { name: "Other/Mixed", recyclable: false, common: "Mixed plastics, bioplastics" }
+  7: { name: "Mixed", recyclable: false, common: "Mixed plastics, bioplastics" }
 };
 
-// items for game + info
-const ITEMS = [
+// items for game + info (categories will be updated based on location)
+let ITEMS = [
   {
     name: "Water bottle",
     code: 1, 
@@ -93,6 +111,100 @@ const ITEMS = [
     description: "Made from mixed plastic #7 - not recyclable curbside"
   }
 ];
+
+// Function to get category for a plastic code based on current location rules
+function getCategoryForCode(code) {
+  if (currentLocationRules.green.includes(code)) return "green";
+  if (currentLocationRules.orange.includes(code)) return "orange";
+  if (currentLocationRules.red.includes(code)) return "red";
+  return "red"; // Default to red if not found
+}
+
+// Function to update item categories based on location
+function updateItemCategoriesForLocation() {
+  ITEMS.forEach(item => {
+    item.category = getCategoryForCode(item.code);
+    // Update descriptions based on category
+    if (item.category === "green") {
+      item.description = `Made from ${PLASTIC_CODE_INFO[item.code].name} #${item.code} - widely recyclable!`;
+    } else if (item.category === "orange") {
+      item.description = `Made from ${PLASTIC_CODE_INFO[item.code].name} #${item.code} - needs special dropoff`;
+    } else {
+      item.description = `Made from ${PLASTIC_CODE_INFO[item.code].name} #${item.code} - not recyclable curbside`;
+    }
+  });
+}
+
+// Function to update CATEGORY_INFO based on location
+function updateCategoryInfoForLocation() {
+  const greenCodes = currentLocationRules.green.map(code => `#${code} (${PLASTIC_CODE_INFO[code].name.split(' ')[0]})`).join(' and ');
+  const orangeCodes = currentLocationRules.orange.map(code => `#${code} (${PLASTIC_CODE_INFO[code].name.split(' ')[0]})`).join(' and ');
+  const redCodes = currentLocationRules.red.map(code => `#${code} (${PLASTIC_CODE_INFO[code].name.split(' ')[0]})`).join(', ');
+  
+  // Build examples based on what codes are in each category
+  let greenExamples = [];
+  if (currentLocationRules.green.includes(1)) greenExamples.push("water bottles", "soda bottles");
+  if (currentLocationRules.green.includes(2)) greenExamples.push("milk jugs", "detergent bottles");
+  if (currentLocationRules.green.includes(5)) greenExamples.push("yogurt cups");
+  
+  let orangeExamples = [];
+  if (currentLocationRules.orange.includes(4)) orangeExamples.push("plastic bags");
+  if (currentLocationRules.orange.includes(5)) orangeExamples.push("yogurt cups", "takeout containers");
+  
+  CATEGORY_INFO = {
+    green: {
+      name: "Green - Widely Recyclable",
+      description: "Accepted in curbside recycling",
+      codes: `Plastic codes ${greenCodes}`,
+      examples: greenExamples.length > 0 ? greenExamples.join(", ") : "Widely recyclable items"
+    },
+    orange: {
+      name: "Orange - Special Dropoff",
+      description: "Requires special dropoff locations",
+      codes: orangeCodes ? `Plastic codes ${orangeCodes}` : "None",
+      examples: orangeExamples.length > 0 ? orangeExamples.join(", ") : "Items requiring special dropoff"
+    },
+    red: {
+      name: "Red - Not Recyclable Curbside",
+      description: "Not accepted in curbside recycling",
+      codes: `Plastic codes ${redCodes}`,
+      examples: "Styrofoam, PVC pipes, mixed plastics"
+    }
+  };
+}
+
+// Function to set location and update rules
+function setLocationRules(location) {
+  // Normalize location string (case insensitive, handle variations)
+  const normalizedLocation = location.trim();
+  
+  // Check for NYC variations
+  if (normalizedLocation.toLowerCase().includes("new york") || 
+      normalizedLocation.toLowerCase().includes("nyc") ||
+      normalizedLocation.toLowerCase() === "new york, ny") {
+    currentLocationRules = LOCATION_RULES["New York, NY"];
+  } else {
+    // Default to Princeton
+    currentLocationRules = LOCATION_RULES["Princeton, NJ"];
+  }
+  
+  // Update item categories and category info
+  updateItemCategoriesForLocation();
+  updateCategoryInfoForLocation();
+  
+  // Update currentItem category if it exists
+  if (currentItem) {
+    currentItem.category = getCategoryForCode(currentItem.code);
+    // Update description
+    if (currentItem.category === "green") {
+      currentItem.description = `Made from ${PLASTIC_CODE_INFO[currentItem.code].name} #${currentItem.code} - widely recyclable!`;
+    } else if (currentItem.category === "orange") {
+      currentItem.description = `Made from ${PLASTIC_CODE_INFO[currentItem.code].name} #${currentItem.code} - needs special dropoff`;
+    } else {
+      currentItem.description = `Made from ${PLASTIC_CODE_INFO[currentItem.code].name} #${currentItem.code} - not recyclable curbside`;
+    }
+  }
+}
 
 
 // game state
@@ -154,59 +266,59 @@ const trashBarDuration = 180;
 // Contamination tracking
 let greenBinContaminated = false;
 let contaminationTimer = 0;
-const contaminationDuration = 180;  // frames
-let contaminationCounts = {};  // Track contamination count per bin category: { "green": 2, "orange": 1 }
-let contaminatedBins = new Set();  // Track which bins are contaminated (by category: "green", "orange")
-let hasSeenContaminationPopup = false;  // Track if user has seen contamination explanation popup
-let showContaminationPopup = false;  // Show contamination popup on first contamination
-let contaminationStartTimes = {};  // Track when each bin was contaminated (frame count): { "green": 500, "orange": 1200 }
-const decontaminationPromptDelay = 300;  // Show prompt 5 seconds after contamination (300 frames at 60fps)
-const decontaminationPromptDuration = 600;  // Show prompt for 10 seconds total (600 frames at 60fps)
+const contaminationDuration = 180;
+let contaminationCounts = {};
+let contaminatedBins = new Set(); 
+let hasSeenContaminationPopup = false;
+let showContaminationPopup = false;
+let contaminationStartTimes = {};
+const decontaminationPromptDelay = 300; 
+const decontaminationPromptDuration = 600;
 
 // Decontamination mini-game
-let decontaminationActive = false;  // Is decontamination game active
-let decontaminationBinCategory = null;  // Which bin category is being decontaminated
-let decontaminationBinX = 0;  // X position of bin in decontamination game
-let decontaminationBinWidth = 180;  // Width of bin in decontamination game (scaled 1.5x from 120)
-let decontaminationBinY = 0;  // Y position of bin (at bottom)
-let decontaminationItems = [];  // Array of items falling in decontamination game
-let decontaminationItemSpeed = 3;  // Speed of items falling
-let decontaminationSpawnTimer = 0;  // Timer for spawning new items
-let decontaminationSpawnInterval = 240;  // Frames between item spawns (slower for better visibility)
-let decontaminationSpawnOffset = 0;  // Vertical offset to reduce spacing between items
-let decontaminationCorrectCount = 0;  // Count of correct items collected
-let decontaminationRequiredCorrect = 5;  // Need 5 correct items to decontaminate
+let decontaminationActive = false;
+let decontaminationBinCategory = null;
+let decontaminationBinX = 0;
+let decontaminationBinWidth = 180;
+let decontaminationBinY = 0;
+let decontaminationItems = [];
+let decontaminationItemSpeed = 3;
+let decontaminationSpawnTimer = 0;
+let decontaminationSpawnInterval = 240;
+let decontaminationSpawnOffset = 0;
+let decontaminationCorrectCount = 0;
+let decontaminationRequiredCorrect = 5;
 let decontaminationWrongCount = 0;
 let decontaminationMaxWrong = 3;
-let decontaminationCooldowns = {};  // Track cooldown timers per bin category: { "green": 1800 }
-const decontaminationCooldownDuration = 1800;  // 30 seconds at 60fps
-let showDecontaminationTutorial = true;
+let decontaminationCooldowns = {};
+const decontaminationCooldownDuration = 1800;
+let showDecontaminationTutorial = false;
 let showDecontaminationResult = false;
 let decontaminationResultSuccess = false;
-let decontaminationBinBounceTimer = 0;  // Timer for bin bounce animation (correct answer)
-let decontaminationBinBounceDuration = 40; // frames
-let decontaminationBinShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
-let decontaminationBinShakeDuration = 30; // frames
+let decontaminationBinBounceTimer = 0;
+let decontaminationBinBounceDuration = 40;
+let decontaminationBinShakeTimer = 0;
+let decontaminationBinShakeDuration = 30;
 
 // Fake leaderboard and PvP
 let showLeaderboard = false;
 let showPvP = false;
-let showHelpPanel = false;  // Show help panel with controls and plastics grid
-let helpPanelScrollY = 0;  // Scroll position for help panel
+let showHelpPanel = false;
+let helpPanelScrollY = 0; 
 
 // Header visibility and animation
-let headerVisible = true;  // Whether header is visible
-let headerAnimationProgress = 1.0;  // Animation progress (1.0 = fully visible, 0.0 = fully hidden)
-let headerAnimationTarget = 1.0;  // Target animation state (1.0 = show, 0.0 = hide)
-const headerAnimationSpeed = 0.1;  // Animation speed per frame
+let headerVisible = true; 
+let headerAnimationProgress = 1.0; 
+let headerAnimationTarget = 1.0; 
+const headerAnimationSpeed = 0.1; 
 
 // Tutorial system
 let tutorialActive = false;
 let tutorialStep = 0;
 let tutorialAutoAdvance = false;
 let tutorialAutoAdvanceTimer = 0;
-const tutorialAutoAdvanceDelay = 300; // frames before auto-advancing (5 seconds at 60fps)
-let tutorialSubStep = 0; // Track substeps within interactive tutorial steps (0 = explanation, 1 = ready, 2 = playing)
+const tutorialAutoAdvanceDelay = 300; 
+let tutorialSubStep = 0; 
 
 // Tutorial steps
 const tutorialSteps = [
@@ -307,30 +419,30 @@ let animationFrame = 0;
 // Flash effect for correct/incorrect feedback
 let flashColor = null;  // null, "green", or "red"
 let flashTimer = 0;
-let flashDuration = 30; // frames (about 0.5 seconds at 60fps)
+let flashDuration = 30; 
 
 // Animation effects for feedback
-let binBounceTimer = 0;  // Timer for bin bounce animation (correct answer)
-let binBounceDuration = 40; // frames
-let bouncingBinIndex = -1;  // Index of the bin that should bounce (-1 = none)
-let binShakeTimer = 0;  // Timer for bin shake animation (incorrect answer)
-let binShakeDuration = 30; // frames
-let shakingBinIndex = -1;  // Index of the bin that should shake (-1 = none)
+let binBounceTimer = 0; 
+let binBounceDuration = 40;
+let bouncingBinIndex = -1; 
+let binShakeTimer = 0; 
+let binShakeDuration = 30;
+let shakingBinIndex = -1; 
 
 // Image loading
 const itemImages = {};  // Cache for loaded images (can be single image or array for variants)
 let imagesLoaded = false;
-let recycleSymbolImage = null;  // Recycling symbol image
-let greenBinImage = null;  // Green bin image
-let yellowBinImage = null;  // Yellow/Orange bin image
-let redBinImage = null;  // Red bin image
-let stopImage = null;  // Stop sign image for contamination indicator
-let handImage = null;  // Hand image
-let correctSound = null;  // Correct sound effect
-let incorrectSound = null;  // Incorrect sound effect
-let oopsSound = null;  // Oops sound effect (when item falls off screen)
-let backgroundMusic = null;  // Background music
-let backgroundMusic2 = null;  // Background music for decontamination minigame
+let recycleSymbolImage = null; 
+let greenBinImage = null;  
+let yellowBinImage = null; 
+let redBinImage = null; 
+let stopImage = null;
+let handImage = null;
+let correctSound = null;
+let incorrectSound = null;
+let oopsSound = null;
+let backgroundMusic = null; 
+let backgroundMusic2 = null;
 
 // Keyboard state
 const keys = {
@@ -338,16 +450,17 @@ const keys = {
   right: false,
   down: false,
   space: false,  // Spacebar to toggle hints (demo mode)
-  shift: false,  // Shift for speed up (3x faster while held)
-  enter: false  // Enter key for instant drop
+  shift: false, 
+  enter: false  
 };
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
+// game initialization
 function initGame() {
   // Get location from localStorage
   gameLocation = localStorage.getItem('gameLocation') || 'Princeton, NJ';
+  
+  // Set location rules and update item categories
+  setLocationRules(gameLocation);
   
   loadImages();
   loadRecycleSymbol();
@@ -367,10 +480,10 @@ function initGame() {
   
   pickRandomItem();
   itemX = canvas.width / 2 - itemWidth / 2;
-  itemY = 210; // Start 30px lower (was 180)
+  itemY = 210;
   setupBins();
   
-  // Check if this is first time playing (tutorial)
+  // Check if this is the first time playing (for displaying tutorial)
   const hasPlayedBefore = localStorage.getItem('hasPlayedBefore');
   if (!hasPlayedBefore) {
     tutorialActive = true;
@@ -401,7 +514,6 @@ function initGame() {
           greenBinContaminated = false;
         }
       } else {
-        // Set cooldown
         decontaminationCooldowns[decontaminationBinCategory] = decontaminationCooldownDuration;
       }
       
@@ -415,7 +527,7 @@ function initGame() {
     // Handle new items popup dismissal
     if (showNewItemsPopup) {
       showNewItemsPopup = false;
-      // If this was a merged popup (level 4+), turn off hints
+      // If level 4+ and hints are on, turn off hints
       if (level >= 4 && showHints) {
         showHints = false;
       }
@@ -459,11 +571,11 @@ function initGame() {
     
     // Check if click is on info button (circular area) - using same position as render
     const headerHeight = 60;
-    const scoreBadgeWidth = 200;  // Match render function
+    const scoreBadgeWidth = 200; 
     const scoreBadgeX = canvas.width - scoreBadgeWidth - 15;
-    const infoButtonX = scoreBadgeX - 35;  // 15px spacing from score badge
-    const infoButtonY = 10 + headerHeight / 2;  // Centered vertically
-    const infoButtonRadius = 18 * 0.7; // Scaled down by 0.7
+    const infoButtonX = scoreBadgeX - 35; 
+    const infoButtonY = 10 + headerHeight / 2; 
+    const infoButtonRadius = 18 * 0.7;
     
     const dx = x - infoButtonX;
     const dy = y - infoButtonY;
@@ -474,9 +586,9 @@ function initGame() {
     }
     
     // Check clicks on leaderboard button (in header) - using same positions as render
-    const leaderboardBtnX = 210;  // Moved 10px right from 200
-    const leaderboardBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
-    const leaderboardBtnWidth = 120;  // Wider for larger text
+    const leaderboardBtnX = 210;  
+    const leaderboardBtnY = 10 + (headerHeight - 30) / 2;  
+    const leaderboardBtnWidth = 120;
     const leaderboardBtnHeight = 30;
     if (x >= leaderboardBtnX && x <= leaderboardBtnX + leaderboardBtnWidth && 
         y >= leaderboardBtnY && y <= leaderboardBtnY + leaderboardBtnHeight) {
@@ -485,8 +597,8 @@ function initGame() {
     }
     
     // Check clicks on PvP button (in header) - using same positions as render
-    const pvpBtnX = 350;  // Moved 10px right from 340
-    const pvpBtnY = 10 + (headerHeight - 30) / 2;  // Centered vertically
+    const pvpBtnX = 350; 
+    const pvpBtnY = 10 + (headerHeight - 30) / 2; 
     const pvpBtnWidth = 70;
     const pvpBtnHeight = 30;
     if (x >= pvpBtnX && x <= pvpBtnX + pvpBtnWidth && 
@@ -1157,90 +1269,51 @@ function setupBins() {
     ];
   } else if (phase === "code") {
     // Set up bins based on which category we're sorting codes for
-    if (codePhaseCategory === "green") {
-      // Green items: #1, #2 only (widely recyclable)
+    // Use location-based rules to determine which codes go in which category
+    const codesForCategory = currentLocationRules[codePhaseCategory] || [];
+    
+    if (codesForCategory.length === 0) {
+      // No codes for this category (shouldn't happen, but handle gracefully)
+      bins = [];
+    } else if (codesForCategory.length === 1) {
+      // Single bin centered
+      bins = [
+        {
+          x: (canvas.width - binWidth) / 2,
+          y: binY,
+          width: binWidth,
+          height: binHeight,
+          label: `#${codesForCategory[0]} ${PLASTIC_CODE_INFO[codesForCategory[0]].name.split(' ')[0]}`,
+          code: codesForCategory[0],
+          color: codePhaseCategory === "green" ? "#4CAF50" : codePhaseCategory === "orange" ? "#FF9800" : "#F44336",
+          info: PLASTIC_CODE_INFO[codesForCategory[0]]
+        }
+      ];
+    } else if (codesForCategory.length === 2) {
+      // Two bins
       const twoBinSpacing = (canvas.width - (binWidth * 2)) / 3;
-      bins = [
-        {
-          x: twoBinSpacing,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#1 PET",
-          code: 1,
-          color: "#4CAF50",
-          info: PLASTIC_CODE_INFO[1]
-        },
-        {
-          x: twoBinSpacing * 2 + binWidth,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#2 HDPE",
-          code: 2,
-          color: "#4CAF50",
-          info: PLASTIC_CODE_INFO[2]
-        }
-      ];
-    } else if (codePhaseCategory === "orange") {
-      // Orange items: #4, #5
-      const twoBinSpacing = (canvas.width - (binWidth * 2)) / 3;
-      bins = [
-        {
-          x: twoBinSpacing,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#4 LDPE",
-          code: 4,
-          color: "#FF9800",
-          info: PLASTIC_CODE_INFO[4]
-        },
-        {
-          x: twoBinSpacing * 2 + binWidth,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#5 PP",
-          code: 5,
-          color: "#FF9800",
-          info: PLASTIC_CODE_INFO[5]
-        }
-      ];
-    } else if (codePhaseCategory === "red") {
-      // Red items: #3, #6, #7
-      bins = [
-        {
-          x: spacing,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#3 PVC",
-          code: 3,
-          color: "#F44336",
-          info: PLASTIC_CODE_INFO[3]
-        },
-        {
-          x: spacing * 2 + binWidth,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#6 PS",
-          code: 6,
-          color: "#F44336",
-          info: PLASTIC_CODE_INFO[6]
-        },
-        {
-          x: spacing * 3 + binWidth * 2,
-          y: binY,
-          width: binWidth,
-          height: binHeight,
-          label: "#7 Other",
-          code: 7,
-          color: "#F44336",
-          info: PLASTIC_CODE_INFO[7]
-        }
-      ];
+      bins = codesForCategory.map((code, index) => ({
+        x: twoBinSpacing * (index + 1) + binWidth * index,
+        y: binY,
+        width: binWidth,
+        height: binHeight,
+        label: `#${code} ${PLASTIC_CODE_INFO[code].name.split(' ')[0]}`,
+        code: code,
+        color: codePhaseCategory === "green" ? "#4CAF50" : codePhaseCategory === "orange" ? "#FF9800" : "#F44336",
+        info: PLASTIC_CODE_INFO[code]
+      }));
+    } else {
+      // Three or more bins (use standard spacing)
+      bins = codesForCategory.map((code, index) => ({
+        x: spacing * (index + 1) + binWidth * index,
+        y: binY,
+        width: binWidth,
+        height: binHeight,
+        label: `#${code} ${PLASTIC_CODE_INFO[code].name.split(' ')[0]}`,
+        code: code,
+        color: codePhaseCategory === "green" ? "#4CAF50" : codePhaseCategory === "orange" ? "#FF9800" : "#F44336",
+        info: PLASTIC_CODE_INFO[code]
+      }));
     }
   }
 }
