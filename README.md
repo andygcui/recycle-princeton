@@ -107,27 +107,6 @@ recycle-princeton/
 └── package.json       # Node.js dependencies (for Electron)
 ```
 
-## Features
-
-### Educational Features
-- **Plastic Code System**: Learn about all 7 plastic recycling codes
-- **Location Awareness**: Understand that recycling rules vary by location
-- **Contamination Education**: See how wrong items contaminate recycling streams
-- **Educational Messages**: Get detailed explanations for each item
-
-### Game Features
-- **Progressive Unlocking**: New items unlock as you level up
-- **Visual Feedback**: Bins bounce/shake for correct/incorrect answers
-- **Trash Pile System**: Visual indicator of incorrectly sorted items
-- **Decontamination Minigame**: Clean contaminated bins in a fun arcade-style game
-- **Tutorial System**: Comprehensive first-time tutorial
-- **Help Panel**: Quick reference for controls and plastic codes
-
-### Audio
-- Background music that loops during gameplay
-- Special music for decontamination minigame
-- Sound effects for correct/incorrect answers and mistakes
-
 ## License
 
 MIT License - feel free to use and modify for educational purposes.
