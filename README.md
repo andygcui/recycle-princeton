@@ -1,0 +1,174 @@
+# Recycle Quest
+
+An educational recycling game that teaches players how to properly sort plastic items based on recycling codes and local recycling rules. Learn about different plastic types, contamination, and proper recycling practices while having fun!
+
+## 🎮 About
+
+Recycle Quest is an interactive educational game designed to teach players about recycling plastics correctly. The game features:
+
+- **Location-based recycling rules** - Enter your location to learn recycling rules specific to your area
+- **Progressive difficulty** - Start with simple items and unlock more complex plastics as you level up
+- **Educational content** - Learn about plastic codes (#1-7) and which bins they belong in
+- **Contamination system** - Understand how wrong items can contaminate recycling bins
+- **Decontamination minigame** - Clean contaminated bins in a fun side game
+- **Tutorial system** - Comprehensive tutorial for first-time players
+- **Sound effects and music** - Immersive audio experience
+
+## 🎯 Gameplay
+
+### Objective
+
+Sort falling plastic items into the correct recycling bins before they hit the ground. Items fall faster as you progress through levels, and incorrect sorting can contaminate bins or fill up your trash pile.
+
+### The Three Bins
+
+- **🟢 Green Bin** - Widely recyclable (curbside pickup)
+  - Plastic codes #1 (PET) and #2 (HDPE)
+  - Examples: Water bottles, milk jugs, detergent bottles, soda bottles
+
+- **🟠 Orange Bin** - Special dropoff needed
+  - Plastic codes #4 (LDPE) and #5 (PP)
+  - Examples: Plastic bags, yogurt cups, takeout containers
+
+- **🔴 Red Bin** - Not recyclable curbside
+  - Plastic codes #3 (PVC), #6 (PS), #7 (Other/Mixed)
+  - Examples: Styrofoam cups, PVC pipes, mixed plastics
+
+### Game Mechanics
+
+- **Levels**: Progress through 4 levels, unlocking new items at each level
+- **Trash Pile**: Incorrectly sorted items add to your trash pile. Game over if it reaches 100%!
+- **Contamination**: Wrong items in bins cause contamination. Clean contaminated bins using the decontamination minigame
+- **Hints**: Toggle educational hints on/off to see which bin each item belongs in
+- **Score**: Earn points for correctly sorting items
+
+## ⌨️ Controls
+
+### Main Game
+- **← → Arrow Keys** - Move falling item left/right
+- **↓ Arrow Key** - Move item down faster
+- **Shift** - Hold to move item 3x faster
+- **Enter** - Instantly drop item into bin directly below
+- **Space** - Pause/Unpause game
+- **X** - Toggle hints on/off
+- **H** - Toggle sound effects and hand visibility
+- **R** - Restart game (when game over)
+- **L** - Toggle leaderboard
+- **Click Help Button** - Open help panel with controls and plastic codes info
+
+### Decontamination Minigame
+- **← → Arrow Keys** - Move bin left/right to catch correct items
+- **T** - Toggle decontamination tutorial
+
+### Tutorial
+- **→ Arrow Key** or **Enter** - Advance to next step
+- **← Arrow Key** - Go back to previous step
+- **Escape** - Skip tutorial
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- A modern web browser (Chrome, Firefox, Safari, Edge)
+- No additional dependencies required for web version
+
+### Installation
+
+1. Clone or download this repository
+2. Open `home.html` in your web browser
+3. Enter your location and click "PLAY"
+
+### Running Locally
+
+Simply open `home.html` in your web browser. The game runs entirely client-side with no server required.
+
+### Electron Version (Optional)
+
+If you want to run as a desktop app:
+
+```bash
+npm install
+npm start
+```
+
+## 📁 Project Structure
+
+```
+recycle-princeton/
+├── home.html          # Home page with location input
+├── index.html         # Main game page
+├── info.html          # Educational information page
+├── game.js            # Main game logic and mechanics
+├── main.js            # Electron main process (if using Electron)
+├── style.css          # Game styling
+├── images/            # Game assets
+│   ├── *.png          # Item and bin images
+│   ├── *.mp3          # Sound effects and music
+│   └── README.md      # Image assets documentation
+└── package.json       # Node.js dependencies (for Electron)
+```
+
+## 🎨 Features
+
+### Educational Features
+- **Plastic Code System**: Learn about all 7 plastic recycling codes
+- **Location Awareness**: Understand that recycling rules vary by location
+- **Contamination Education**: See how wrong items contaminate recycling streams
+- **Educational Messages**: Get detailed explanations for each item
+
+### Game Features
+- **Progressive Unlocking**: New items unlock as you level up
+- **Visual Feedback**: Bins bounce/shake for correct/incorrect answers
+- **Trash Pile System**: Visual indicator of incorrectly sorted items
+- **Decontamination Minigame**: Clean contaminated bins in a fun arcade-style game
+- **Tutorial System**: Comprehensive first-time tutorial
+- **Help Panel**: Quick reference for controls and plastic codes
+
+### Audio
+- Background music that loops during gameplay
+- Special music for decontamination minigame
+- Sound effects for correct/incorrect answers and mistakes
+
+## 🎓 Learning Objectives
+
+Players will learn:
+- How to identify plastic recycling codes (#1-7)
+- Which plastics are widely recyclable vs. need special dropoff
+- Which plastics cannot be recycled curbside
+- How contamination affects recycling streams
+- Location-specific recycling rules
+
+## 🛠️ Technologies Used
+
+- **HTML5 Canvas** - Game rendering
+- **JavaScript** - Game logic and mechanics
+- **CSS** - Styling and layout
+- **Web Audio API** - Sound effects and music
+- **LocalStorage** - Save game preferences and progress
+- **Electron** (optional) - Desktop app wrapper
+
+## 📝 Notes
+
+- The game is designed for educational purposes
+- Recycling rules are simplified for gameplay - always check your local recycling guidelines
+- The game uses Princeton, NJ as the default location but accepts any location input
+- All game progress and settings are stored locally in your browser
+
+## 🐛 Troubleshooting
+
+- **Music not playing**: Make sure sound is enabled (press H) and check browser autoplay policies
+- **Game not loading**: Ensure all files are in the same directory and images folder exists
+- **Controls not working**: Make sure the game canvas has focus (click on it)
+
+## 📄 License
+
+MIT License - feel free to use and modify for educational purposes.
+
+## 🙏 Credits
+
+Created as an educational tool to promote proper recycling practices and environmental awareness.
+
+---
+
+**Remember**: Always check your local recycling guidelines! This game is for educational purposes only.
+
