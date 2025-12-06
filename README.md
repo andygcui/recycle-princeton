@@ -1,8 +1,9 @@
 # Recycle Quest
 
-An educational recycling game that teaches players how to properly sort plastic items based on recycling codes and local recycling rules. Learn about different plastic types, contamination, and proper recycling practices while having fun!
+An educational sorting game that teaches children aged 5--8 how to correctly sort common household plastic items based on recycling codes and local recycling rules. Learn about different plastic types, contamination, and proper recycling practices while having fun! Created for Princeton VIS 216: Graphic Design. 
 
-## 🎮 About
+
+## About
 
 Recycle Quest is an interactive educational game designed to teach players about recycling plastics correctly. The game features:
 
@@ -14,35 +15,36 @@ Recycle Quest is an interactive educational game designed to teach players about
 - **Tutorial system** - Comprehensive tutorial for first-time players
 - **Sound effects and music** - Immersive audio experience
 
-## 🎯 Gameplay
+## Gameplay
 
 ### Objective
 
 Sort falling plastic items into the correct recycling bins before they hit the ground. Items fall faster as you progress through levels, and incorrect sorting can contaminate bins or fill up your trash pile.
 
 ### The Three Bins
+Three bins are labeled using a color-coded system to distinguish between the recyclability of plastics. 
 
-- **🟢 Green Bin** - Widely recyclable (curbside pickup)
+- **Green Bin** - Widely recyclable (curbside pickup)
   - Plastic codes #1 (PET) and #2 (HDPE)
   - Examples: Water bottles, milk jugs, detergent bottles, soda bottles
 
-- **🟠 Orange Bin** - Special dropoff needed
+- **Orange Bin** - Special dropoff needed
   - Plastic codes #4 (LDPE) and #5 (PP)
   - Examples: Plastic bags, yogurt cups, takeout containers
 
-- **🔴 Red Bin** - Not recyclable curbside
+- **Red Bin** - Not recyclable curbside
   - Plastic codes #3 (PVC), #6 (PS), #7 (Other/Mixed)
   - Examples: Styrofoam cups, PVC pipes, mixed plastics
 
 ### Game Mechanics
 
-- **Levels**: Progress through 4 levels, unlocking new items at each level
-- **Trash Pile**: Incorrectly sorted items add to your trash pile. Game over if it reaches 100%!
-- **Contamination**: Wrong items in bins cause contamination. Clean contaminated bins using the decontamination minigame
+- **Levels**: Progress through levels, unlocking new plastic items at each level
+- **Trash Pile**: Incorrectly sorted items add to your trash pile. If it reaches 100%, you lose the game!
+- **Contamination**: Wrong items in bins cause contamination. Clean contaminated bins by winning the decontamination minigame
 - **Hints**: Toggle educational hints on/off to see which bin each item belongs in
 - **Score**: Earn points for correctly sorting items
 
-## ⌨️ Controls
+## Controls
 
 ### Main Game
 - **← → Arrow Keys** - Move falling item left/right
@@ -65,7 +67,7 @@ Sort falling plastic items into the correct recycling bins before they hit the g
 - **← Arrow Key** - Go back to previous step
 - **Escape** - Skip tutorial
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -91,7 +93,7 @@ npm install
 npm start
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 recycle-princeton/
@@ -108,7 +110,7 @@ recycle-princeton/
 └── package.json       # Node.js dependencies (for Electron)
 ```
 
-## 🎨 Features
+## Features
 
 ### Educational Features
 - **Plastic Code System**: Learn about all 7 plastic recycling codes
@@ -129,7 +131,7 @@ recycle-princeton/
 - Special music for decontamination minigame
 - Sound effects for correct/incorrect answers and mistakes
 
-## 🎓 Learning Objectives
+## Learning Objectives
 
 Players will learn:
 - How to identify plastic recycling codes (#1-7)
@@ -138,7 +140,7 @@ Players will learn:
 - How contamination affects recycling streams
 - Location-specific recycling rules
 
-## 🛠️ Technologies Used
+## Technologies Used
 
 - **HTML5 Canvas** - Game rendering
 - **JavaScript** - Game logic and mechanics
@@ -147,24 +149,19 @@ Players will learn:
 - **LocalStorage** - Save game preferences and progress
 - **Electron** (optional) - Desktop app wrapper
 
-## 📝 Notes
+## Notes
 
 - The game is designed for educational purposes
 - Recycling rules are simplified for gameplay - always check your local recycling guidelines
 - The game uses Princeton, NJ as the default location but accepts any location input
 - All game progress and settings are stored locally in your browser
 
-## 🐛 Troubleshooting
 
-- **Music not playing**: Make sure sound is enabled (press H) and check browser autoplay policies
-- **Game not loading**: Ensure all files are in the same directory and images folder exists
-- **Controls not working**: Make sure the game canvas has focus (click on it)
-
-## 📄 License
+## License
 
 MIT License - feel free to use and modify for educational purposes.
 
-## 🙏 Credits
+## Credits
 
 Created as an educational tool to promote proper recycling practices and environmental awareness.
 
