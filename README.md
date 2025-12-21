@@ -50,20 +50,20 @@ recycling bins are redesigned - 3 bins are labeled using a color-coded system to
 ## controls
 
 ### main game
-- **← →** - move falling item left/right
-- **↓** - move item down faster
-- **shift** - hold to move item 3x faster
-- **enter** - instantly drop item into bin directly below
-- **space** - pause/Unpause game
-- **X** - toggle hints on/off
-- **H** - toggle sound effects and hand visibility
-- **R** - restart game (when game over)
-- **L** - toggle leaderboard
-- **help button** - open help panel with controls and plastic codes info
+- **← →** move falling item left/right
+- **↓** move item down faster
+- **shift**: hold to move item 3x faster
+- **enter**: instantly drop item into bin directly below
+- **space**: pause/Unpause game
+- **X**: toggle hints on/off
+- **H**: toggle sound effects and hand visibility
+- **R**: restart game (when game over)
+- **L**: toggle leaderboard
+- **help button**: open help panel with controls and plastic codes info
 
 ### decontamination minigame
 - **← →** - move bin left/right to catch correct items
-- **T** - toggle decontamination tutorial
+- **T**: toggle decontamination tutorial
 
 ### installation
 
